@@ -188,19 +188,52 @@
       ],
       onSelect: function(item) {
         Lampa.Select.close();
+
+        function showInput(title, current, onEnter) {
+          if (Lampa.Input && typeof Lampa.Input.show === "function") {
+            Lampa.Input.show({ title: title, value: current, onEnter: onEnter });
+          } else if (Lampa.Keypad && typeof Lampa.Keypad.show === "function") {
+            Lampa.Keypad.show({ title: title, value: current, onEnter: onEnter });
+          } else {
+            // Власне поле вводу як запасний варіант
+            var overlay = document.createElement("div");
+            overlay.style.cssText = "position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.8);z-index:99999;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:16px;";
+            var label = document.createElement("div");
+            label.textContent = title;
+            label.style.cssText = "color:#fff;font-size:20px;text-align:center;max-width:80vw;";
+            var inp = document.createElement("input");
+            inp.type = "text";
+            inp.value = current || "";
+            inp.style.cssText = "padding:12px 20px;font-size:18px;width:500px;max-width:80vw;background:#222;color:#fff;border:2px solid #fff;border-radius:8px;outline:none;";
+            var hint = document.createElement("div");
+            hint.textContent = "Enter — зберегти, Escape — скасувати";
+            hint.style.cssText = "color:#aaa;font-size:14px;";
+            overlay.appendChild(label);
+            overlay.appendChild(inp);
+            overlay.appendChild(hint);
+            document.body.appendChild(overlay);
+            inp.focus(); inp.select();
+            function close(save) {
+              var v = inp.value;
+              document.body.removeChild(overlay);
+              document.removeEventListener("keydown", onKey);
+              if (save) onEnter(v);
+            }
+            function onKey(e) {
+              if (e.key === "Enter")  { e.stopPropagation(); close(true);  }
+              if (e.key === "Escape") { e.stopPropagation(); close(false); }
+            }
+            document.addEventListener("keydown", onKey);
+          }
+        }
+
         if (item.action === "key") {
-          Lampa.Input.show({
-            title: "X-Master-Key з jsonbin.io",
-            value: apiKey(),
-            placeholder: "$2b$10$...",
-            onEnter: function(v) { cfgSet("apiKey", v.trim()); noty("Ключ збережено"); }
+          showInput("X-Master-Key з jsonbin.io", apiKey(), function(v) {
+            cfgSet("apiKey", v.trim()); noty("Ключ збережено");
           });
         } else if (item.action === "bin") {
-          Lampa.Input.show({
-            title: "BIN ID (залиште порожнім для авто-створення)",
-            value: binId(),
-            placeholder: "64a3b...",
-            onEnter: function(v) { cfgSet("binId", v.trim()); noty("BIN ID збережено"); }
+          showInput("BIN ID (порожньо = створити автоматично)", binId(), function(v) {
+            cfgSet("binId", v.trim()); noty("BIN ID збережено");
           });
         } else if (item.action === "sync") { sync(); }
           else if (item.action === "push") { push(); }
