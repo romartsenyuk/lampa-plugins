@@ -249,22 +249,67 @@
 
     function inject() {
       if (injected) return;
+
       // Спосіб 1: офіційний API (нові версії Lampa)
       if (window.Lampa && Lampa.Menu && Lampa.Menu.add) {
         Lampa.Menu.add({ id: ID, title: "Прогрес серій", icon: ICON, action: openMenu });
         injected = true;
         return;
       }
-      // Спосіб 2: DOM
+
+      // Спосіб 2: DOM + реєстрація в навігації Lampa
       var list = document.querySelector(".menu__list");
       if (!list) return;
       injected = true;
+
       var li = document.createElement("li");
       li.className = "menu__item selector";
+      li.setAttribute("data-action", ID);
       li.innerHTML = '<div class="menu__ico">'+ICON+'</div><div class="menu__text">Прогрес серій</div>';
+
+      // Клік мишею
       li.addEventListener("click", openMenu);
+
+      // Клавіатура / пульт: Enter або OK (keyCode 13)
+      li.setAttribute("tabindex", "0");
+      li.addEventListener("keydown", function(e) {
+        if (e.keyCode === 13 || e.key === "Enter") {
+          e.preventDefault();
+          e.stopPropagation();
+          openMenu();
+        }
+      });
+
       // Вставляємо перед останнім пунктом
       list.insertBefore(li, list.lastElementChild || null);
+
+      // Реєструємо в системі навігації Lampa
+      // Lampa використовує Lampa.Controller для керування фокусом
+      if (Lampa.Controller && Lampa.Controller.add) {
+        // Після того як меню отримає фокус — додаємо наш елемент до навігації
+        Lampa.Listener.follow("menu", function(e) {
+          if (e.type === "open" || e.type === "show") {
+            // Примусово включаємо наш елемент в навігацію
+            setTimeout(function() {
+              if (Lampa.Navigator && Lampa.Navigator.add) {
+                Lampa.Navigator.add(li);
+              }
+            }, 100);
+          }
+        });
+      }
+
+      // Спроба одразу додати до навігатора
+      setTimeout(function() {
+        if (window.Lampa && Lampa.Navigator && Lampa.Navigator.add) {
+          Lampa.Navigator.add(li);
+        }
+        // Деякі версії Lampa використовують jQuery-подібний фокус
+        if (li.classList && !li.classList.contains("focused")) {
+          li.setAttribute("tabindex", "0");
+        }
+      }, 500);
+
       log("Пункт меню додано");
     }
 
