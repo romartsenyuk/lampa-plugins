@@ -342,16 +342,63 @@
     }, 10 * 60 * 1000);
   }
 
+  // ── Бекап в localStorage (додатковий захист) ──
+  function saveBackup() {
+    try {
+      var data = getLocal();
+      if (Object.keys(data).length > 0) {
+        localStorage.setItem(ID + "_backup", JSON.stringify({
+          ts: Date.now(),
+          continue: data
+        }));
+      }
+    } catch(e) {}
+  }
+
+  function restoreBackup() {
+    try {
+      var raw = localStorage.getItem(ID + "_backup");
+      if (!raw) return false;
+      var backup = JSON.parse(raw);
+      if (!backup || !backup.continue) return false;
+      var local = getLocal();
+      var merged = merge(local, backup.continue);
+      setLocal(merged);
+      log("Відновлено з локального бекапу");
+      return true;
+    } catch(e) { return false; }
+  }
+
   // ── Старт ──────────────────────────────────
   function init() {
     log("Запуск");
     addToMenu();
     hookPlayer();
     startAuto();
-    // Синхронізація при запуску (через 8 секунд — після завантаження CUB/Alpac)
+
+    // Зберігаємо бекап кожні 2 хвилини
+    setInterval(saveBackup, 2 * 60 * 1000);
+
+    // При запуску: спочатку відновлюємо з бекапу, потім тягнемо з хмари
     setTimeout(function() {
-      if (apiKey() && binId()) sync(true);
+      restoreBackup();
+      if (apiKey() && binId()) {
+        sync(true);
+      }
     }, 8000);
+
+    // Слідкуємо за входом в акаунт — після логіну відновлюємо дані
+    if (Lampa.Listener) {
+      Lampa.Listener.follow("account", function(e) {
+        if (e.type === "auth" || e.type === "login" || e.type === "ready") {
+          log("Акаунт авторизовано — відновлюємо прогрес...");
+          setTimeout(function() {
+            restoreBackup();
+            if (apiKey() && binId()) sync(true);
+          }, 3000);
+        }
+      });
+    }
   }
 
   // Чекаємо Lampa
