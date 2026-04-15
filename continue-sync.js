@@ -24,10 +24,10 @@
                 onSelect: function (item) {
                     if (item.action === 'api') {
                         var v = prompt('Введіть Master Key:', key);
-                        if (v) { localStorage.setItem('cs_key', v.trim()); _this.showSettings(); }
+                        if (v) { localStorage.setItem('cs_key', v.replace(/["']/g, "").trim()); _this.showSettings(); }
                     } else if (item.action === 'bin') {
                         var v = prompt('Введіть BIN ID (або порожньо):', bin);
-                        localStorage.setItem('cs_bin', v ? v.trim() : ''); _this.showSettings();
+                        localStorage.setItem('cs_bin', v ? v.replace(/["']/g, "").trim() : ''); _this.showSettings();
                     } else if (item.action === 'sync') { _this.sync(); }
                     else if (item.action === 'pull') { _this.pull(); }
                 }
@@ -36,23 +36,25 @@
         sync: function () {
             var key = localStorage.getItem('cs_key');
             var bin = localStorage.getItem('cs_bin');
-            if (!key) return Lampa.Noty.show('Введіть API Ключ');
+            if (!key) return Lampa.Noty.show('Потрібен API Ключ');
             
-            var data = Lampa.Storage.get('continue') || {test: 1};
-            Lampa.Noty.show('З\'єднання...');
+            var localData = Lampa.Storage.get('continue') || {};
+            var wrap = { lampa_backup: localData }; // Створюємо чітку структуру
 
+            Lampa.Noty.show('Відправка...');
             $.ajax({
                 url: bin ? 'https://api.jsonbin.io/v3/b/' + bin : 'https://api.jsonbin.io/v3/b',
                 type: bin ? 'PUT' : 'POST',
                 headers: { 'X-Master-Key': key, 'Content-Type': 'application/json', 'X-Bin-Private': 'true' },
-                data: JSON.stringify(data),
+                data: JSON.stringify(wrap),
                 success: function (res) {
-                    localStorage.setItem('cs_bin', bin || res.metadata.id);
-                    Lampa.Noty.show('Успішно!');
+                    var newId = bin || res.metadata.id;
+                    localStorage.setItem('cs_bin', newId);
+                    Lampa.Noty.show('Успішно збережено!');
                 },
                 error: function (xhr) {
-                    var msg = (xhr.responseJSON && xhr.responseJSON.message) ? xhr.responseJSON.message : xhr.status;
-                    Lampa.Noty.show('Помилка: ' + msg);
+                    var err = xhr.responseJSON ? xhr.responseJSON.message : xhr.status;
+                    Lampa.Noty.show('Помилка: ' + err);
                 }
             });
         },
@@ -64,8 +66,10 @@
                 url: 'https://api.jsonbin.io/v3/b/' + bin + '/latest',
                 headers: { 'X-Master-Key': key },
                 success: function (res) {
-                    Lampa.Storage.set('continue', res.record);
-                    Lampa.Noty.show('Оновлено!');
+                    if (res.record && res.record.lampa_backup) {
+                        Lampa.Storage.set('continue', res.record.lampa_backup);
+                        Lampa.Noty.show('Дані отримано!');
+                    }
                 }
             });
         }
