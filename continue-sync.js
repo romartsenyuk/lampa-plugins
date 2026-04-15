@@ -15,18 +15,14 @@
                 this.syncFromCloud(true);
             }
 
-            // Збереження при виході з плеєра
             Lampa.Player.listener.follow('destroy', function() {
                 LampaSync.syncToCloud(true);
             });
         },
 
         cleanup: function () {
-            // Видаляємо всі дублікати меню
             $('.menu__list .menu__item').each(function () {
-                if ($(this).text().indexOf('Прогрес серій') !== -1) {
-                    $(this).remove();
-                }
+                if ($(this).text().indexOf('Прогрес серій') !== -1) $(this).remove();
             });
         },
 
@@ -37,9 +33,7 @@
                 '<div class="menu__text">' + this.name + '</div>' +
                 '</li>');
 
-            item.on('hover:enter click', function() {
-                _this.showSettings();
-            });
+            item.on('hover:enter click', function() { _this.showSettings(); });
             
             var target = $('.menu__list .menu__item').filter(function() {
                 return $(this).text().indexOf('Пізнавальне') !== -1;
@@ -69,51 +63,50 @@
                             _this.showSettings();
                         }
                     } else if (item.action === 'bin') {
-                        var val = prompt('BIN ID:', bin);
+                        var val = prompt('Введіть BIN ID (або порожньо):', bin);
                         localStorage.setItem('continue_sync_binId', val || '');
                         _this.showSettings();
                     } else if (item.action === 'sync') {
                         _this.syncToCloud(false);
                     }
                 },
-                onBack: function() {
-                    Lampa.Controller.toggle('menu');
-                }
+                onBack: function() { Lampa.Controller.toggle('menu'); }
             });
         },
 
         syncToCloud: function (silent) {
-            var _this = this;
             var key = localStorage.getItem('continue_sync_apiKey');
             var bin = localStorage.getItem('continue_sync_binId');
             if (!key) return;
 
             var localData = Lampa.Storage.get('continue') || {};
-            if (Object.keys(localData).length === 0) {
-                localData = { "_init": true, "timestamp": Date.now() };
-            }
+            if (Object.keys(localData).length === 0) localData = { "_init": true };
 
             var url = bin ? 'https://api.jsonbin.io/v3/b/' + bin : 'https://api.jsonbin.io/v3/b';
+            var xhr = new XMLHttpRequest();
             
-            $.ajax({
-                url: url,
-                method: bin ? 'PUT' : 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-Master-Key': key,
-                    'X-Bin-Private': 'true'
-                },
-                data: JSON.stringify(localData),
-                success: function(res) {
-                    if (res.metadata && res.metadata.id) {
-                        localStorage.setItem('continue_sync_binId', res.metadata.id);
-                        if (!silent) Lampa.Noty.show('Збережено успішно');
+            xhr.open(bin ? 'PUT' : 'POST', url, true);
+            xhr.setRequestHeader('Content-Type', 'application/json');
+            xhr.setRequestHeader('X-Master-Key', key);
+            xhr.setRequestHeader('X-Bin-Private', 'true');
+
+            xhr.onreadystatechange = function () {
+                if (xhr.readyState === 4) {
+                    if (xhr.status >= 200 && xhr.status < 300) {
+                        var res = JSON.parse(xhr.responseText);
+                        if (res.metadata && res.metadata.id) {
+                            localStorage.setItem('continue_sync_binId', res.metadata.id);
+                            if (!silent) {
+                                Lampa.Noty.show('Успішно збережено!');
+                                setTimeout(function() { window.location.reload(); }, 1000);
+                            }
+                        }
+                    } else if (!silent) {
+                        Lampa.Noty.show('Помилка: ' + xhr.status);
                     }
-                },
-                error: function(xhr) {
-                    if (!silent) Lampa.Noty.show('Помилка: ' + xhr.status);
                 }
-            });
+            };
+            xhr.send(JSON.stringify(localData));
         },
 
         syncFromCloud: function (silent) {
@@ -121,11 +114,13 @@
             var bin = localStorage.getItem('continue_sync_binId');
             if (!key || !bin) return;
 
-            $.ajax({
-                url: 'https://api.jsonbin.io/v3/b/' + bin + '/latest',
-                method: 'GET',
-                headers: { 'X-Master-Key': key },
-                success: function(res) {
+            var xhr = new XMLHttpRequest();
+            xhr.open('GET', 'https://api.jsonbin.io/v3/b/' + bin + '/latest', true);
+            xhr.setRequestHeader('X-Master-Key', key);
+
+            xhr.onreadystatechange = function () {
+                if (xhr.readyState === 4 && xhr.status === 200) {
+                    var res = JSON.parse(xhr.responseText);
                     var cloudData = res.record || {};
                     var localData = Lampa.Storage.get('continue') || {};
                     var updated = false;
@@ -137,13 +132,13 @@
                             updated = true;
                         }
                     }
-
                     if (updated) {
                         Lampa.Storage.set('continue', localData);
-                        if (!silent) Lampa.Noty.show('Прогрес оновлено');
+                        if (!silent) Lampa.Noty.show('Дані оновлено');
                     }
                 }
-            });
+            };
+            xhr.send();
         }
     };
 
