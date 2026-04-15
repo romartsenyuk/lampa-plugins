@@ -101,7 +101,7 @@
           cfgSet("binId", res.metadata.id);
           log("BIN створено: " + res.metadata.id);
         }
-        noty("✓ Прогрес серій збережено", "success");
+        // push silent
         if (callback) callback(null);
       } else {
         noty("Помилка пуш: " + xhr.status, "error");
@@ -129,7 +129,7 @@
           var local   = getLocal();
           var merged  = merge(local, remote.continue || {});
           setLocal(merged);
-          noty("✓ Прогрес серій синхронізовано", "success");
+          // pull silent
           if (callback) callback(null);
         } catch(e) {
           noty("Помилка обробки даних", "error");
@@ -164,7 +164,7 @@
           setLocal(merged);
           // Одразу пушимо злитий результат
           push(function() {
-            if (!silent) noty("✓ Синхронізовано", "success");
+            // sync silent
           });
         } catch(e) { if (!silent) noty("Помилка синхронізації", "error"); }
       } else if (xhr.status === 404) {
@@ -235,9 +235,15 @@
           showInput("BIN ID (порожньо = створити автоматично)", binId(), function(v) {
             cfgSet("binId", v.trim()); noty("BIN ID збережено");
           });
-        } else if (item.action === "sync") { sync(); }
-          else if (item.action === "push") { push(); }
-          else if (item.action === "pull") { pull(); }
+        } else if (item.action === "sync") {
+          pull(function(err) {
+            if (!err) push(function() { noty("✓ Синхронізовано", "success"); });
+          });
+        } else if (item.action === "push") {
+          push(function() { noty("✓ Завантажено", "success"); });
+        } else if (item.action === "pull") {
+          pull(function() { noty("✓ Отримано", "success"); });
+        }
       }
     });
   }
@@ -335,12 +341,10 @@
     });
   }
 
-  // ── Авто-синхронізація кожні 10 хвилин ────
-  function startAuto() {
-    setInterval(function() {
-      if (apiKey() && binId()) sync(true);
-    }, 10 * 60 * 1000);
-  }
+  // ── Авто-синхронізація ─────────────────────
+  // Пушимо після закриття плеєра (вже є в hookPlayer)
+  // Тут просто заглушка щоб не ламати виклик startAuto()
+  function startAuto() {}
 
   // ── Бекап в localStorage (додатковий захист) ──
   function saveBackup() {
@@ -382,8 +386,13 @@
     // При запуску: спочатку відновлюємо з бекапу, потім тягнемо з хмари
     setTimeout(function() {
       restoreBackup();
+      var local = getLocal();
+      var keys = Object.keys(local);
+      log("Локальний continue: " + keys.length + " записів. Ключі: " + keys.slice(0,3).join(", "));
       if (apiKey() && binId()) {
         sync(true);
+      } else {
+        log("API ключ або BIN ID не встановлено — синхронізація пропущена");
       }
     }, 8000);
 
