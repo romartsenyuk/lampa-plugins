@@ -33,29 +33,84 @@
   }
 
   // ── Читаємо "continue" з Lampa ─────────────
+  // Lampa MX + CUB зберігає дані через Lampa.Storage (не в localStorage напряму)
+  // Перебираємо всі можливі ключі де може лежати прогрес
   function getLocal() {
     try {
-      // Lampa.Storage.get або прямо з localStorage
-      var data = null;
-      if (window.Lampa && Lampa.Storage) {
-        data = Lampa.Storage.get("continue");
+      var data = {};
+
+      // Спосіб 1: Lampa.Storage.get (основний)
+      if (window.Lampa && Lampa.Storage && typeof Lampa.Storage.get === "function") {
+        var s1 = Lampa.Storage.get("continue");
+        if (s1 && typeof s1 === "object") {
+          data = s1;
+          log("Знайдено через Lampa.Storage.get('continue'): " + Object.keys(data).length + " записів");
+        }
       }
-      if (!data) {
-        var raw = localStorage.getItem("continue");
-        data = raw ? JSON.parse(raw) : {};
+
+      // Спосіб 2: якщо Storage повернув порожнє — шукаємо по всіх ключах localStorage
+      if (Object.keys(data).length === 0) {
+        var keys = ["continue", "lampa-continue", "cub_continue", "serial_continue"];
+        for (var i = 0; i < keys.length; i++) {
+          try {
+            var raw = localStorage.getItem(keys[i]);
+            if (raw) {
+              var parsed = JSON.parse(raw);
+              if (parsed && typeof parsed === "object" && Object.keys(parsed).length > 0) {
+                data = parsed;
+                log("Знайдено в localStorage['" + keys[i] + "']: " + Object.keys(data).length + " записів");
+                break;
+              }
+            }
+          } catch(e) {}
+        }
       }
-      return data || {};
-    } catch(e) { return {}; }
+
+      // Спосіб 3: перебираємо ВСІ ключі localStorage щоб знайти continue
+      if (Object.keys(data).length === 0) {
+        for (var k = 0; k < localStorage.length; k++) {
+          var key = localStorage.key(k);
+          if (key && key.toLowerCase().indexOf("continue") !== -1) {
+            try {
+              var val = JSON.parse(localStorage.getItem(key));
+              if (val && typeof val === "object" && !Array.isArray(val)) {
+                var subkeys = Object.keys(val);
+                // Перевіряємо що це схоже на continue (має season/episode/time)
+                if (subkeys.length > 0) {
+                  var first = val[subkeys[0]];
+                  if (first && (first.season !== undefined || first.episode !== undefined || first.time !== undefined)) {
+                    data = val;
+                    log("Знайдено в localStorage['" + key + "']: " + subkeys.length + " записів");
+                    break;
+                  }
+                }
+              }
+            } catch(e) {}
+          }
+        }
+      }
+
+      // Якщо все ще 0 — логуємо всі ключі для діагностики
+      if (Object.keys(data).length === 0) {
+        var allKeys = [];
+        for (var j = 0; j < localStorage.length; j++) {
+          allKeys.push(localStorage.key(j));
+        }
+        log("Всі ключі localStorage: " + allKeys.join(", "));
+      }
+
+      return data;
+    } catch(e) { log("Помилка getLocal: " + e); return {}; }
   }
 
   // ── Записуємо злитий "continue" назад ──────
   function setLocal(data) {
     try {
-      if (window.Lampa && Lampa.Storage) {
+      if (window.Lampa && Lampa.Storage && typeof Lampa.Storage.set === "function") {
         Lampa.Storage.set("continue", data);
       }
       localStorage.setItem("continue", JSON.stringify(data));
-    } catch(e) {}
+    } catch(e) { log("Помилка setLocal: " + e); }
   }
 
   // ── Злиття: беремо більший час перегляду ───
