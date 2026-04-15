@@ -5,19 +5,23 @@
         init: function () {
             var _this = this;
             
-            // 1. ВИДАЛЯЄМО ВСІ ДУБЛІКАТИ (очищення меню)
+            // 1. ВИДАЛЯЄМО ВСІ СТАРІ КНОПКИ (навіть якщо їх 10)
+            // Шукаємо за текстом і за класом
+            $('.menu__item').filter(function() {
+                return $(this).text().indexOf('Прогрес серій') > -1;
+            }).remove();
             $('.js-sync-clean').remove(); 
             
-            // 2. Додаємо один чистий пункт через невелику паузу
+            // 2. Додаємо один чистий пункт через паузу
             setTimeout(function(){ 
                 _this.addMenuItem(); 
-            }, 500);
+            }, 1000);
         },
         addMenuItem: function () {
             var _this = this;
             
-            // Перевірка, щоб не додати два рази в одну сесію
-            if ($('.menu__list .js-sync-clean').length > 0) return;
+            // Перевірка на дублікат (якщо хтось встиг додати раніше за цей скрипт)
+            if ($('.js-sync-clean').length > 0) return;
 
             var item = $('<li class="menu__item selector focusable js-sync-clean"><div class="menu__ico" style="color: #ff9500 !important;"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2V6M12 18V22M6 12H2M22 12H18M19.07 4.93L16.24 7.76M7.76 16.24L4.93 19.07M19.07 19.07L16.24 16.24M7.76 7.76L4.93 4.93"/></svg></div><div class="menu__text">' + this.name + '</div></li>');
             
@@ -52,10 +56,8 @@
             var key = localStorage.getItem('cs_key');
             var bin = localStorage.getItem('cs_bin');
             if (!key) return Lampa.Noty.show('Потрібен API Ключ');
-            
             var data = Lampa.Storage.get('continue') || {};
             Lampa.Noty.show('Синхронізація...');
-            
             $.ajax({
                 url: bin ? 'https://api.jsonbin.io/v3/b/' + bin : 'https://api.jsonbin.io/v3/b',
                 type: bin ? 'PUT' : 'POST',
@@ -64,11 +66,9 @@
                 success: function (res) {
                     var newId = bin || res.metadata.id;
                     localStorage.setItem('cs_bin', newId);
-                    Lampa.Noty.show('Збережено успішно!');
+                    Lampa.Noty.show('Збережено!');
                 },
-                error: function (xhr) {
-                    Lampa.Noty.show('Помилка сервера');
-                }
+                error: function (xhr) { Lampa.Noty.show('Помилка сервера'); }
             });
         },
         pull: function () {
