@@ -6,19 +6,16 @@
         init: function () {
             var _this = this;
             
-            // Видаляємо всі старі версії, щоб не було дублів у меню
             $('.js-sync-clean').remove();
             $('.menu__item').filter(function() {
                 return $(this).text().indexOf('Прогрес серій') > -1 || $(this).text().indexOf('Синхронізація+') > -1;
             }).remove();
 
-            // Додаємо кнопку в меню через паузу для стабільності EXE
             setTimeout(function(){ 
                 _this.addMenuItem();
-                _this.autoPull(); // Тихе завантаження при старті
+                _this.autoPull(); 
             }, 1500);
 
-            // Слухаємо подію закінчення перегляду для авто-збереження
             Lampa.Player.listener.follow('destroy', function(){
                 setTimeout(function(){ _this.sync(true); }, 5000); 
             });
@@ -27,7 +24,6 @@
         addMenuItem: function () {
             var _this = this;
             if ($('.js-sync-clean').length > 0) return;
-
             var item = $('<li class="menu__item selector focusable js-sync-clean"><div class="menu__ico" style="color: #ff9500 !important;"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg></div><div class="menu__text">' + this.name + '</div></li>');
             item.on('click', function() { _this.showSettings(); });
             $('.menu__list').append(item);
@@ -41,10 +37,10 @@
             Lampa.Select.show({
                 title: this.name,
                 items: [
-                    { title: 'API Ключ (Master Key)', subtitle: key ? 'Налаштовано' : 'Потрібно ввести', action: 'api' },
-                    { title: 'BIN ID (Хмара)', subtitle: bin || 'Створиться автоматично', action: 'bin' },
-                    { title: 'Зберегти прогрес зараз', subtitle: 'Ручна синхронізація в хмару', action: 'sync' },
-                    { title: 'Відновити прогрес', subtitle: 'Завантажити останню копію', action: 'pull' }
+                    { title: 'API Ключ', subtitle: key ? 'Налаштовано' : 'Порожньо', action: 'api' },
+                    { title: 'BIN ID', subtitle: bin || 'Порожньо', action: 'bin' },
+                    { title: 'Зберегти прогрес зараз', action: 'sync' },
+                    { title: 'Відновити прогрес', action: 'pull' }
                 ],
                 onSelect: function (item) {
                     if (item.action === 'api') {
@@ -56,7 +52,7 @@
                             localStorage.setItem('cs_bin', v ? v.trim() : ''); _this.showSettings();
                         });
                     } else if (item.action === 'sync') { _this.sync(false); }
-                    else if (item.action === 'pull') { _this.pull(); }
+                    else if (item.action === 'pull') { _this.pull(false); }
                 }
             });
         },
@@ -64,10 +60,10 @@
         sync: function (silent) {
             var key = localStorage.getItem('cs_key');
             var bin = localStorage.getItem('cs_bin');
-            if (!key) return !silent && Lampa.Noty.show('Помилка: введіть API Ключ');
+            if (!key) return;
             
             var data = Lampa.Storage.get('continue') || {};
-            if (!silent) Lampa.Noty.show('Збереження у хмару...');
+            if (!silent) Lampa.Noty.show('Відправка в хмару...');
             
             $.ajax({
                 url: bin ? 'https://api.jsonbin.io/v3/b/' + bin : 'https://api.jsonbin.io/v3/b',
@@ -76,10 +72,7 @@
                 data: JSON.stringify({backup: data}),
                 success: function (res) {
                     if (!bin) localStorage.setItem('cs_bin', res.metadata.id);
-                    if (!silent) Lampa.Noty.show('Синхронізація успішна');
-                },
-                error: function (xhr) {
-                    Lampa.Noty.show('Помилка синхронізації: ' + xhr.status);
+                    if (!silent) Lampa.Noty.show('Збережено!');
                 }
             });
         },
@@ -87,27 +80,31 @@
         autoPull: function () {
             var key = localStorage.getItem('cs_key');
             var bin = localStorage.getItem('cs_bin');
-            if (key && bin) {
-                this.pull(true);
-            }
+            if (key && bin) this.pull(true);
         },
 
         pull: function (silent) {
             var key = localStorage.getItem('cs_key');
             var bin = localStorage.getItem('cs_bin');
-            if (!key || !bin) return !silent && Lampa.Noty.show('Помилка: немає даних для відновлення');
+            if (!key || !bin) return;
             
             $.ajax({
                 url: 'https://api.jsonbin.io/v3/b/' + bin + '/latest',
                 headers: { 'X-Master-Key': key },
                 success: function (res) {
                     if (res.record && res.record.backup) {
+                        // 1. Записуємо дані в пам'ять
                         Lampa.Storage.set('continue', res.record.backup);
-                        if (!silent) Lampa.Noty.show('Дані відновлено');
+                        
+                        // 2. ПРИМУСОВЕ ОНОВЛЕННЯ: Кажемо Лампі перечитати історію
+                        if (Lampa.Activity && Lampa.Activity.active && Lampa.Activity.active().component === 'continue') {
+                             Lampa.Activity.active().activity.render();
+                        }
+                        
+                        if (!silent) {
+                            Lampa.Noty.show('Дані відновлено! Перезавантажте розділ історії.');
+                        }
                     }
-                },
-                error: function() {
-                    if (!silent) Lampa.Noty.show('Помилка завантаження');
                 }
             });
         }
