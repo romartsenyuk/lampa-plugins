@@ -10,16 +10,24 @@
             this.apiKey = localStorage.getItem('continue_sync_apiKey') || '';
             this.binId = localStorage.getItem('continue_sync_binId') || '';
 
+            this.cleanupMenu(); // Спочатку видаляємо дублікати
             this.addMenuItem();
             
-            // Тиха синхронізація при старті
             if (this.apiKey && this.binId) {
                 setTimeout(this.syncFromCloud.bind(this, true), 3000);
             }
 
-            // Слідкуємо за оновленням прогресу
             Lampa.Player.listener.follow('destroy', function(){
                 LampaSync.syncToCloud(true);
+            });
+        },
+
+        cleanupMenu: function () {
+            // Видаляємо всі існуючі пункти з нашою назвою, щоб не було дублів
+            $('.menu__list .menu__item').each(function () {
+                if ($(this).text().indexOf('Прогрес серій') !== -1) {
+                    $(this).remove();
+                }
             });
         },
 
@@ -34,31 +42,37 @@
                 _this.showSettings();
             });
 
-            $('.menu__list').append(item);
+            // Знаходимо розділ "Пізнавальне" і вставляємо відразу після нього
+            var search_point = $('.menu__list .menu__item').filter(function() {
+                return $(this).text().indexOf('Пізнавальне') !== -1;
+            });
+
+            if (search_point.length) {
+                search_point.after(item);
+            } else {
+                $('.menu__list').append(item);
+            }
         },
 
         showSettings: function () {
             var _this = this;
-            var items = [
-                { title: 'Ключ API', subtitle: this.apiKey || 'Натисніть для вводу', type: 'api' },
-                { title: 'BIN ID', subtitle: this.binId || 'Створиться автоматично', type: 'bin' },
-                { title: 'Синхронізувати зараз', subtitle: 'Push/Pull дані', type: 'sync' },
-                { title: 'Діагностика', subtitle: 'Показати лог у консолі', type: 'debug' }
-            ];
-
             Lampa.Select.show({
                 title: this.name,
-                items: items,
+                items: [
+                    { title: 'Ключ API', subtitle: this.apiKey || 'Ввести', type: 'api' },
+                    { title: 'BIN ID', subtitle: this.binId || 'Створити', type: 'bin' },
+                    { title: 'Синхронізувати зараз', type: 'sync' }
+                ],
                 onSelect: function (item) {
                     if (item.type === 'api') {
-                        var val = prompt('Введіть X-Master-Key:', _this.apiKey);
+                        var val = prompt('X-Master-Key:', _this.apiKey);
                         if (val) {
                             _this.apiKey = val;
                             localStorage.setItem('continue_sync_apiKey', val);
                             _this.showSettings();
                         }
                     } else if (item.type === 'bin') {
-                        var val = prompt('Введіть BIN ID:', _this.binId);
+                        var val = prompt('BIN ID:', _this.binId);
                         if (val) {
                             _this.binId = val;
                             localStorage.setItem('continue_sync_binId', val);
@@ -66,63 +80,42 @@
                         }
                     } else if (item.type === 'sync') {
                         _this.syncToCloud(false);
-                    } else if (item.type === 'debug') {
-                        console.log('[LampaSync] Data found:', _this.getContinueData());
-                        Lampa.Noty.show('Дані виведено в консоль (F12)');
                     }
                 },
-                onBack: function () {
-                    Lampa.Controller.toggle('menu');
-                }
+                onBack: function () { Lampa.Controller.toggle('menu'); }
             });
         },
 
         getContinueData: function() {
             var found = {};
             try {
-                // Спроба 1: Lampa.Storage (найчастіше в нових версіях)
                 var sData = Lampa.Storage.get('continue');
                 if (sData) found = (typeof sData === 'string') ? JSON.parse(sData) : sData;
-
-                // Спроба 2: localStorage (якщо перша пуста)
                 if (Object.keys(found).length === 0) {
                     var lData = localStorage.getItem('continue');
                     if (lData) found = JSON.parse(lData);
                 }
-                
-                // Спроба 3: Пошук у кеші (для Lampa MX)
-                if (Object.keys(found).length === 0 && Lampa.Cache) {
-                    var cData = Lampa.Cache.get('continue');
-                    if (cData) found = cData;
-                }
-            } catch(e) { console.log('[LampaSync] Read error:', e); }
+            } catch(e) {}
             return found;
         },
 
         syncToCloud: function (silent) {
             var _this = this;
             if (!this.apiKey) return;
-
             var data = this.getContinueData();
             if (Object.keys(data).length === 0) return;
 
-            var url = this.binId ? 'https://api.jsonbin.io/v3/b/' + this.binId : 'https://api.jsonbin.io/v3/b';
-            
             $.ajax({
-                url: url,
+                url: this.binId ? 'https://api.jsonbin.io/v3/b/' + this.binId : 'https://api.jsonbin.io/v3/b',
                 type: this.binId ? 'PUT' : 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-Master-Key': this.apiKey,
-                    'X-Bin-Private': 'true'
-                },
+                headers: { 'Content-Type': 'application/json', 'X-Master-Key': this.apiKey, 'X-Bin-Private': 'true' },
                 data: JSON.stringify(data),
                 success: function (res) {
                     if (!_this.binId && res.metadata) {
                         _this.binId = res.metadata.id;
                         localStorage.setItem('continue_sync_binId', _this.binId);
                     }
-                    if (!silent) Lampa.Noty.show('Дані в хмарі');
+                    if (!silent) Lampa.Noty.show('Збережено');
                 }
             });
         },
@@ -130,7 +123,6 @@
         syncFromCloud: function (silent) {
             var _this = this;
             if (!this.apiKey || !this.binId) return;
-
             $.ajax({
                 url: 'https://api.jsonbin.io/v3/b/' + this.binId + '/latest',
                 type: 'GET',
@@ -138,19 +130,14 @@
                 success: function (res) {
                     var cloudData = res.record;
                     var localData = _this.getContinueData();
-                    
                     for (var key in cloudData) {
                         if (!localData[key] || (cloudData[key].time > localData[key].time)) {
                             localData[key] = cloudData[key];
                         }
                     }
-
-                    // Записуємо всюди, де можливо
                     Lampa.Storage.set('continue', localData);
                     localStorage.setItem('continue', JSON.stringify(localData));
-                    if (Lampa.Cache) Lampa.Cache.set('continue', localData);
-                    
-                    if (!silent) Lampa.Noty.show('Прогрес оновлено');
+                    if (!silent) Lampa.Noty.show('Оновлено');
                 }
             });
         }
