@@ -40,17 +40,6 @@
             else $('.menu__list').append(item);
         },
 
-        // Виклик вбудованої клавіатури Lampa
-        openKeyboard: function (title, value, callback) {
-            Lampa.Input.edit({
-                title: title,
-                value: value,
-                free: true
-            }, function (new_value) {
-                if (new_value !== undefined) callback(new_value.trim());
-            });
-        },
-
         showSettings: function () {
             var _this = this;
             var key = localStorage.getItem('continue_sync_apiKey') || '';
@@ -66,15 +55,24 @@
                 ],
                 onSelect: function (item) {
                     if (item.action === 'api') {
-                        _this.openKeyboard('Введіть X-Master-Key', key, function(v) {
-                            localStorage.setItem('continue_sync_apiKey', v);
-                            _this.showSettings();
-                        });
+                        // Для iOS використовуємо prompt з невеликою затримкою
+                        setTimeout(function() {
+                            var v = prompt('Введіть API Key:', key);
+                            if (v !== null) {
+                                localStorage.setItem('continue_sync_apiKey', v.trim());
+                                Lampa.Noty.show('Ключ збережено');
+                                _this.showSettings();
+                            }
+                        }, 200);
                     } else if (item.action === 'bin') {
-                        _this.openKeyboard('Введіть BIN ID', bin, function(v) {
-                            localStorage.setItem('continue_sync_binId', v);
-                            _this.showSettings();
-                        });
+                        setTimeout(function() {
+                            var v = prompt('Введіть BIN ID:', bin);
+                            if (v !== null) {
+                                localStorage.setItem('continue_sync_binId', v.trim());
+                                Lampa.Noty.show('BIN збережено');
+                                _this.showSettings();
+                            }
+                        }, 200);
                     } else if (item.action === 'sync') {
                         _this.syncToCloud(false);
                     } else if (item.action === 'pull') {
@@ -88,7 +86,7 @@
         syncToCloud: function (silent) {
             var key = localStorage.getItem('continue_sync_apiKey');
             var bin = localStorage.getItem('continue_sync_binId');
-            if (!key) return;
+            if (!key) return !silent && Lampa.Noty.show('Спочатку введіть Ключ!');
 
             var localData = Lampa.Storage.get('continue') || {};
             if (Object.keys(localData).length === 0) localData = { "_init": true };
@@ -107,7 +105,7 @@
                         var res = JSON.parse(xhr.responseText);
                         if (res.metadata && res.metadata.id) {
                             localStorage.setItem('continue_sync_binId', res.metadata.id);
-                            if (!silent) Lampa.Noty.show('Успішно збережено!');
+                            if (!silent) Lampa.Noty.show('Збережено в хмару!');
                         }
                     } else if (!silent) {
                         Lampa.Noty.show('Помилка: ' + xhr.status);
@@ -142,18 +140,4 @@
                     }
                     if (updated) {
                         Lampa.Storage.set('continue', localData);
-                        if (!silent) Lampa.Noty.show('Прогрес отримано!');
-                    } else if (!silent) {
-                        Lampa.Noty.show('Дані вже актуальні');
-                    }
-                }
-            };
-            xhr.send();
-        }
-    };
-
-    if (window.appready) LampaSync.init();
-    else Lampa.Listener.follow('app', function(e) {
-        if (e.type === 'ready') LampaSync.init();
-    });
-})();
+                        if (!silent) Lampa.
