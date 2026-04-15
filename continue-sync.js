@@ -7,20 +7,19 @@
         init: function () {
             var _this = this;
 
-            // Видаляємо тільки свій пункт
             $('.js-sync-clean').remove();
 
             Lampa.Listener.follow('app', function (e) {
                 if (e.type === 'ready') {
                     _this.addMenuItem();
-                    _this.autoPull(); // авто синхронізація при старті
+                    _this.autoPull();
                 }
             });
 
             // після перегляду
             Lampa.Listener.follow('full', function (e) {
                 if (e.type === 'complite') {
-                    _this.sync();
+                    _this.sync('auto');
                 }
             });
         },
@@ -76,19 +75,18 @@
                         });
                     }
 
-                    if (item.action === 'sync') _this.sync();
-                    if (item.action === 'pull') _this.pull();
+                    if (item.action === 'sync') _this.sync('manual');
+                    if (item.action === 'pull') _this.pull(true);
                 }
             });
         },
 
-        // MERGE даних (важливо!)
         mergeData: function (local, cloud) {
             local = local || {};
             cloud = cloud || {};
 
             Object.keys(cloud).forEach(function (key) {
-                if (!local[key] || cloud[key].time > local[key].time) {
+                if (!local[key] || (cloud[key].time || 0) > (local[key].time || 0)) {
                     local[key] = cloud[key];
                 }
             });
@@ -96,13 +94,21 @@
             return local;
         },
 
-        sync: function () {
+        sync: function (type) {
             var key = localStorage.getItem('cs_key');
             var bin = localStorage.getItem('cs_bin');
 
-            if (!key) return;
+            if (!key || !bin) {
+                Lampa.Noty.show('❌ Нема API або BIN');
+                return;
+            }
 
-            var data = Lampa.Storage.get('continue') || {};
+            var data = {
+                continue: Lampa.Storage.get('continue') || {},
+                history: Lampa.Storage.get('history') || {}
+            };
+
+            if (type !== 'auto') Lampa.Noty.show('🔄 Синхронізація...');
 
             $.ajax({
                 url: 'https://api.jsonbin.io/v3/b/' + bin,
@@ -112,28 +118,46 @@
                     'Content-Type': 'application/json'
                 },
                 data: JSON.stringify({backup: data}),
+                success: function () {
+                    if (type !== 'auto') {
+                        Lampa.Noty.show('✅ Синхронізовано');
+                    }
+                },
                 error: function () {
-                    Lampa.Noty.show('❌ Помилка синхронізації');
+                    Lampa.Noty.show('❌ Помилка синку');
                 }
             });
         },
 
-        pull: function () {
+        pull: function (manual) {
             var _this = this;
             var key = localStorage.getItem('cs_key');
             var bin = localStorage.getItem('cs_bin');
 
-            if (!key || !bin) return;
+            if (!key || !bin) {
+                if (manual) Lampa.Noty.show('❌ Нема API або BIN');
+                return;
+            }
+
+            if (manual) Lampa.Noty.show('🔄 Отримання...');
 
             $.ajax({
                 url: 'https://api.jsonbin.io/v3/b/' + bin + '/latest',
                 headers: { 'X-Master-Key': key },
                 success: function (res) {
                     if (res.record && res.record.backup) {
-                        var local = Lampa.Storage.get('continue') || {};
-                        var merged = _this.mergeData(local, res.record.backup);
+                        var cloud = res.record.backup;
 
-                        Lampa.Storage.set('continue', merged);
+                        var localContinue = Lampa.Storage.get('continue') || {};
+                        var localHistory = Lampa.Storage.get('history') || {};
+
+                        var mergedContinue = _this.mergeData(localContinue, cloud.continue);
+                        var mergedHistory = _this.mergeData(localHistory, cloud.history);
+
+                        Lampa.Storage.set('continue', mergedContinue);
+                        Lampa.Storage.set('history', mergedHistory);
+
+                        if (manual) Lampa.Noty.show('✅ Дані оновлено');
                     }
                 },
                 error: function () {
@@ -143,7 +167,12 @@
         },
 
         autoPull: function () {
-            this.pull();
+            var _this = this;
+
+            setTimeout(function () {
+                _this.pull(false);
+                Lampa.Noty.show('☁️ Синхронізація при запуску');
+            }, 2000);
         }
     };
 
