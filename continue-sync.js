@@ -11,7 +11,8 @@
 
         cleanup: function () {
             $('.menu__list .menu__item').each(function () {
-                if ($(this).text().indexOf('Прогрес серій') !== -1) $(this).remove();
+                var text = $(this).text().toLowerCase();
+                if (text.indexOf('прогрес серій') !== -1) $(this).remove();
             });
         },
 
@@ -23,7 +24,13 @@
                 '</li>');
 
             item.on('hover:enter click', function() { _this.showSettings(); });
-            $('.menu__list').append(item);
+            
+            var target = $('.menu__list .menu__item').filter(function() {
+                return $(this).text().indexOf('Пізнавальне') !== -1;
+            });
+
+            if (target.length) target.after(item);
+            else $('.menu__list').append(item);
         },
 
         showSettings: function () {
@@ -34,25 +41,25 @@
             Lampa.Select.show({
                 title: this.name,
                 items: [
-                    { title: 'API Ключ', subtitle: key ? 'Введено' : 'Порожньо', action: 'api' },
+                    { title: 'API Ключ', subtitle: key ? 'Введено' : 'Натисніть для вводу', action: 'api' },
                     { title: 'BIN ID', subtitle: bin || 'Створиться автоматично', action: 'bin' },
                     { title: 'НАДІСЛАТИ В ХМАРУ', action: 'sync' },
                     { title: 'ЗАВАНТАЖИТИ З ХМАРИ', action: 'pull' }
                 ],
                 onSelect: function (item) {
-                    try {
-                        if (item.action === 'api') {
-                            var v = prompt('Введіть API Key:', key);
+                    if (item.action === 'api') {
+                        Lampa.Input.edit({ title: 'Введіть API Key', value: key, free: true }, function (v) {
                             if (v) { localStorage.setItem('continue_sync_apiKey', v.trim()); _this.showSettings(); }
-                        } else if (item.action === 'bin') {
-                            var v = prompt('Введіть BIN ID:', bin);
+                        });
+                    } else if (item.action === 'bin') {
+                        Lampa.Input.edit({ title: 'Введіть BIN ID', value: bin, free: true }, function (v) {
                             if (v !== null) { localStorage.setItem('continue_sync_binId', v.trim()); _this.showSettings(); }
-                        } else if (item.action === 'sync') {
-                            _this.syncToCloud();
-                        } else if (item.action === 'pull') {
-                            _this.syncFromCloud();
-                        }
-                    } catch(e) { Lampa.Noty.show('Помилка меню: ' + e.message); }
+                        });
+                    } else if (item.action === 'sync') {
+                        _this.syncToCloud();
+                    } else if (item.action === 'pull') {
+                        _this.syncFromCloud();
+                    }
                 },
                 onBack: function() { Lampa.Controller.toggle('menu'); }
             });
@@ -61,30 +68,26 @@
         syncToCloud: function () {
             var key = localStorage.getItem('continue_sync_apiKey');
             var bin = localStorage.getItem('continue_sync_binId');
-            if (!key) return Lampa.Noty.show('Немає ключа');
+            if (!key) return Lampa.Noty.show('Потрібен API Ключ');
 
             var localData = Lampa.Storage.get('continue') || {};
             var url = bin ? 'https://api.jsonbin.io/v3/b/' + bin : 'https://api.jsonbin.io/v3/b';
             
-            Lampa.Noty.show('Відправка...');
+            Lampa.Noty.show('Відправка даних...');
 
             $.ajax({
                 url: url,
                 type: bin ? 'PUT' : 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-Master-Key': key,
-                    'X-Bin-Private': 'true'
-                },
+                headers: { 'X-Master-Key': key, 'Content-Type': 'application/json', 'X-Bin-Private': 'true' },
                 data: JSON.stringify(localData),
                 success: function (res) {
                     if (res.metadata && res.metadata.id) {
                         localStorage.setItem('continue_sync_binId', res.metadata.id);
-                        Lampa.Noty.show('Успішно збережено!');
+                        Lampa.Noty.show('Збережено в хмару!');
                     }
                 },
                 error: function (xhr) {
-                    Lampa.Noty.show('Помилка: ' + xhr.status + ' ' + xhr.responseText);
+                    Lampa.Noty.show('Помилка сервера: ' + xhr.status);
                 }
             });
         },
@@ -92,7 +95,7 @@
         syncFromCloud: function () {
             var key = localStorage.getItem('continue_sync_apiKey');
             var bin = localStorage.getItem('continue_sync_binId');
-            if (!key || !bin) return Lampa.Noty.show('Немає даних для завантаження');
+            if (!key || !bin) return Lampa.Noty.show('Немає BIN ID');
 
             Lampa.Noty.show('Завантаження...');
 
@@ -103,7 +106,7 @@
                 success: function (res) {
                     if (res.record) {
                         Lampa.Storage.set('continue', res.record);
-                        Lampa.Noty.show('Дані отримано! Перезавантажте розділ');
+                        Lampa.Noty.show('Успішно оновлено!');
                     }
                 },
                 error: function (xhr) {
