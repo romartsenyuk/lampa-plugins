@@ -4,27 +4,18 @@
         name: 'Прогрес серій',
         init: function () {
             var _this = this;
-            
-            // 1. ВИДАЛЯЄМО ВСІ СТАРІ КНОПКИ (навіть якщо їх 10)
-            // Шукаємо за текстом і за класом
+            // Очищення дублів
             $('.menu__item').filter(function() {
                 return $(this).text().indexOf('Прогрес серій') > -1;
             }).remove();
             $('.js-sync-clean').remove(); 
             
-            // 2. Додаємо один чистий пункт через паузу
-            setTimeout(function(){ 
-                _this.addMenuItem(); 
-            }, 1000);
+            setTimeout(function(){ _this.addMenuItem(); }, 1000);
         },
         addMenuItem: function () {
             var _this = this;
-            
-            // Перевірка на дублікат (якщо хтось встиг додати раніше за цей скрипт)
             if ($('.js-sync-clean').length > 0) return;
-
             var item = $('<li class="menu__item selector focusable js-sync-clean"><div class="menu__ico" style="color: #ff9500 !important;"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2V6M12 18V22M6 12H2M22 12H18M19.07 4.93L16.24 7.76M7.76 16.24L4.93 19.07M19.07 19.07L16.24 16.24M7.76 7.76L4.93 4.93"/></svg></div><div class="menu__text">' + this.name + '</div></li>');
-            
             item.on('click', function() { _this.showSettings(); });
             $('.menu__list').append(item);
         },
@@ -42,11 +33,20 @@
                 ],
                 onSelect: function (item) {
                     if (item.action === 'api') {
-                        var v = prompt('Введіть Master Key:', key);
-                        if (v) { localStorage.setItem('cs_key', v.trim()); _this.showSettings(); }
+                        // Використовуємо внутрішній ввід Lampa замість prompt
+                        Lampa.Input.edit({
+                            value: key,
+                            title: 'Введіть Master Key'
+                        }, function (v) {
+                            if (v) { localStorage.setItem('cs_key', v.trim()); _this.showSettings(); }
+                        });
                     } else if (item.action === 'bin') {
-                        var v = prompt('Введіть BIN ID:', bin);
-                        localStorage.setItem('cs_bin', v ? v.trim() : ''); _this.showSettings();
+                        Lampa.Input.edit({
+                            value: bin,
+                            title: 'Введіть BIN ID'
+                        }, function (v) {
+                            localStorage.setItem('cs_bin', v ? v.trim() : ''); _this.showSettings();
+                        });
                     } else if (item.action === 'sync') { _this.sync(); }
                     else if (item.action === 'pull') { _this.pull(); }
                 }
@@ -68,7 +68,7 @@
                     localStorage.setItem('cs_bin', newId);
                     Lampa.Noty.show('Збережено!');
                 },
-                error: function (xhr) { Lampa.Noty.show('Помилка сервера'); }
+                error: function () { Lampa.Noty.show('Помилка сервера'); }
             });
         },
         pull: function () {
