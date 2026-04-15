@@ -26,7 +26,7 @@
                         var v = prompt('Введіть Master Key:', key);
                         if (v) { localStorage.setItem('cs_key', v.trim()); _this.showSettings(); }
                     } else if (item.action === 'bin') {
-                        var v = prompt('Введіть BIN ID (або залиште порожнім):', bin);
+                        var v = prompt('Введіть BIN ID:', bin);
                         localStorage.setItem('cs_bin', v ? v.trim() : ''); _this.showSettings();
                     } else if (item.action === 'sync') { _this.sync(); }
                     else if (item.action === 'pull') { _this.pull(); }
@@ -36,45 +36,53 @@
         sync: function () {
             var key = localStorage.getItem('cs_key');
             var bin = localStorage.getItem('cs_bin');
-            if (!key) return Lampa.Noty.show('Введіть API Ключ');
+            if (!key) return Lampa.Noty.show('Потрібен API Ключ');
             
-            // Отримуємо дані і робимо їх "чистими" для сервера
-            var data = Lampa.Storage.get('continue') || {};
-            var cleanData = JSON.parse(JSON.stringify(data)); 
-
-            Lampa.Noty.show('Спроба відправки...');
+            var data = Lampa.Storage.get('continue') || { test: "init" }; // Якщо порожньо, шлемо заглушку
+            
+            Lampa.Noty.show('З'єднуюсь з сервером...');
+            
             $.ajax({
                 url: bin ? 'https://api.jsonbin.io/v3/b/' + bin : 'https://api.jsonbin.io/v3/b',
                 type: bin ? 'PUT' : 'POST',
-                headers: { 'X-Master-Key': key, 'Content-Type': 'application/json', 'X-Bin-Private': 'true' },
-                data: JSON.stringify(cleanData),
+                headers: { 
+                    'X-Master-Key': key, 
+                    'Content-Type': 'application/json',
+                    'X-Bin-Private': 'true'
+                },
+                data: JSON.stringify(data),
+                dataType: 'json',
                 success: function (res) {
-                    if (res.metadata && res.metadata.id) {
-                        localStorage.setItem('cs_bin', res.metadata.id);
-                        Lampa.Noty.show('Успішно збережено!');
-                    }
+                    var newBin = bin || res.metadata.id;
+                    localStorage.setItem('cs_bin', newBin);
+                    Lampa.Noty.show('Успішно збережено!');
+                    console.log('Sync Success. BIN:', newBin);
                 },
                 error: function (xhr) {
-                    // Виводимо текст помилки від сервера для діагностики
-                    var msg = xhr.responseJSON ? xhr.responseJSON.message : xhr.status;
-                    Lampa.Noty.show('Помилка: ' + msg);
-                    console.log('Sync Error Detail:', xhr.responseText);
+                    var errorMsg = "Невідома помилка";
+                    if (xhr.responseJSON && xhr.responseJSON.message) errorMsg = xhr.responseJSON.message;
+                    else if (xhr.status === 0) errorMsg = "Блокування запиту (CORS/Network)";
+                    else errorMsg = "Код: " + xhr.status;
+                    
+                    Lampa.Noty.show('Сервер: ' + errorMsg);
+                    console.error('Full error:', xhr);
                 }
             });
         },
         pull: function () {
             var key = localStorage.getItem('cs_key');
             var bin = localStorage.getItem('cs_bin');
-            if (!key || !bin) return Lampa.Noty.show('Немає даних');
+            if (!key || !bin) return Lampa.Noty.show('Немає BIN ID');
             $.ajax({
                 url: 'https://api.jsonbin.io/v3/b/' + bin + '/latest',
                 headers: { 'X-Master-Key': key },
                 success: function (res) {
                     if (res.record) {
                         Lampa.Storage.set('continue', res.record);
-                        Lampa.Noty.show('Дані оновлено!');
+                        Lampa.Noty.show('Дані отримано!');
                     }
-                }
+                },
+                error: function() { Lampa.Noty.show('Помилка завантаження'); }
             });
         }
     };
