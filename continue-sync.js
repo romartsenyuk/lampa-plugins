@@ -4,12 +4,13 @@
         name: 'Прогрес серій',
         init: function () {
             var _this = this;
-            // Видаляємо дублікати за текстом
+            // Видаляємо ВСІ дублікати з меню перед стартом
+            $('.js-sync-clean').remove();
             $('.menu__item').filter(function() {
-                return $(this).text().trim() == 'Прогрес серій';
+                return $(this).text().indexOf('Прогрес серій') > -1 || $(this).text().indexOf('Синхронізація') > -1;
             }).remove();
-            
-            setTimeout(function(){ _this.addMenuItem(); }, 1000);
+
+            setTimeout(function(){ _this.addMenuItem(); }, 1500);
         },
         addMenuItem: function () {
             var _this = this;
@@ -27,8 +28,8 @@
                 items: [
                     { title: 'API Ключ', subtitle: key ? 'Введено' : 'Порожньо', action: 'api' },
                     { title: 'BIN ID', subtitle: bin || 'Порожньо', action: 'bin' },
-                    { title: 'ЗБЕРЕГТИ', action: 'sync' },
-                    { title: 'ВІДНОВИТИ', action: 'pull' }
+                    { title: 'ЗБЕРЕГТИ ВСЕ', action: 'sync' },
+                    { title: 'ВІДНОВИТИ ВСЕ', action: 'pull' }
                 ],
                 onSelect: function (item) {
                     if (item.action === 'api') {
@@ -47,7 +48,11 @@
         sync: function () {
             var key = localStorage.getItem('cs_key'), bin = localStorage.getItem('cs_bin');
             if (!key) return Lampa.Noty.show('Потрібен API Ключ');
-            var data = Lampa.Storage.get('continue') || {};
+            
+            // Збираємо дані з усіх можливих місць
+            var data = Lampa.Storage.get('continue') || JSON.parse(localStorage.getItem('continue') || '{}');
+            
+            Lampa.Noty.show('Відправка даних...');
             $.ajax({
                 url: bin ? 'https://api.jsonbin.io/v3/b/' + bin : 'https://api.jsonbin.io/v3/b',
                 type: bin ? 'PUT' : 'POST',
@@ -55,22 +60,33 @@
                 data: JSON.stringify({backup: data}),
                 success: function (res) {
                     if (!bin) localStorage.setItem('cs_bin', res.metadata.id);
-                    Lampa.Noty.show('Збережено успішно!');
+                    Lampa.Noty.show('Дані в хмарі!');
                 },
-                error: function () { Lampa.Noty.show('Помилка API'); }
+                error: function () { Lampa.Noty.show('Помилка сервера'); }
             });
         },
         pull: function () {
             var key = localStorage.getItem('cs_key'), bin = localStorage.getItem('cs_bin');
             if (!key || !bin) return Lampa.Noty.show('Потрібен BIN ID');
+            
             $.ajax({
                 url: 'https://api.jsonbin.io/v3/b/' + bin + '/latest',
                 headers: { 'X-Master-Key': key },
                 success: function (res) {
                     if (res.record && res.record.backup) {
-                        Lampa.Storage.set('continue', res.record.backup);
-                        Lampa.Noty.show('Готово! Перезапустіть Лампу');
-                        setTimeout(function(){ window.location.reload(); }, 500);
+                        var d = res.record.backup;
+                        
+                        // 1. Стандартний метод Lampa
+                        Lampa.Storage.set('continue', d);
+                        
+                        // 2. Метод прямого запису в пам'ять браузера
+                        localStorage.setItem('continue', JSON.stringify(d));
+                        
+                        // 3. Команда оновлення інтерфейсу
+                        if (window.Lampa && Lampa.Continue) Lampa.Continue.init();
+
+                        Lampa.Noty.show('Успішно! Перезавантаження...');
+                        setTimeout(function(){ window.location.reload(); }, 1000);
                     }
                 }
             });
