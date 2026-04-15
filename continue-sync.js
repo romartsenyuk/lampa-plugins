@@ -6,24 +6,28 @@
         init: function () {
             var _this = this;
             
+            // Жорстке видалення всіх старих кнопок
             $('.js-sync-clean').remove();
             $('.menu__item').filter(function() {
-                return $(this).text().indexOf('Прогрес серій') > -1 || $(this).text().indexOf('Синхронізація+') > -1;
+                var txt = $(this).text();
+                return txt.indexOf('Прогрес серій') > -1 || txt.indexOf('Синхронізація') > -1;
             }).remove();
 
             setTimeout(function(){ 
                 _this.addMenuItem();
                 _this.autoPull(); 
-            }, 1500);
+            }, 1000);
 
+            // Авто-збереження після перегляду
             Lampa.Player.listener.follow('destroy', function(){
-                setTimeout(function(){ _this.sync(true); }, 5000); 
+                setTimeout(function(){ _this.sync(true); }, 3000); 
             });
         },
 
         addMenuItem: function () {
             var _this = this;
             if ($('.js-sync-clean').length > 0) return;
+
             var item = $('<li class="menu__item selector focusable js-sync-clean"><div class="menu__ico" style="color: #ff9500 !important;"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg></div><div class="menu__text">' + this.name + '</div></li>');
             item.on('click', function() { _this.showSettings(); });
             $('.menu__list').append(item);
@@ -37,9 +41,9 @@
             Lampa.Select.show({
                 title: this.name,
                 items: [
-                    { title: 'API Ключ', subtitle: key ? 'Налаштовано' : 'Порожньо', action: 'api' },
+                    { title: 'API Ключ', subtitle: key ? 'Введено' : 'Порожньо', action: 'api' },
                     { title: 'BIN ID', subtitle: bin || 'Порожньо', action: 'bin' },
-                    { title: 'Зберегти прогрес зараз', action: 'sync' },
+                    { title: 'Зберегти прогрес', action: 'sync' },
                     { title: 'Відновити прогрес', action: 'pull' }
                 ],
                 onSelect: function (item) {
@@ -63,7 +67,7 @@
             if (!key) return;
             
             var data = Lampa.Storage.get('continue') || {};
-            if (!silent) Lampa.Noty.show('Відправка в хмару...');
+            if (!silent) Lampa.Noty.show('Синхронізація з хмарою...');
             
             $.ajax({
                 url: bin ? 'https://api.jsonbin.io/v3/b/' + bin : 'https://api.jsonbin.io/v3/b',
@@ -72,7 +76,7 @@
                 data: JSON.stringify({backup: data}),
                 success: function (res) {
                     if (!bin) localStorage.setItem('cs_bin', res.metadata.id);
-                    if (!silent) Lampa.Noty.show('Збережено!');
+                    if (!silent) Lampa.Noty.show('Успішно збережено!');
                 }
             });
         },
@@ -93,17 +97,15 @@
                 headers: { 'X-Master-Key': key },
                 success: function (res) {
                     if (res.record && res.record.backup) {
-                        // 1. Записуємо дані в пам'ять
+                        // Примусовий запис у сховище Lampa
                         Lampa.Storage.set('continue', res.record.backup);
                         
-                        // 2. ПРИМУСОВЕ ОНОВЛЕННЯ: Кажемо Лампі перечитати історію
-                        if (Lampa.Activity && Lampa.Activity.active && Lampa.Activity.active().component === 'continue') {
+                        // Команда для оновлення розділу "Продовжити перегляд"
+                        if (Lampa.Activity && Lampa.Activity.active().component === 'continue') {
                              Lampa.Activity.active().activity.render();
                         }
                         
-                        if (!silent) {
-                            Lampa.Noty.show('Дані відновлено! Перезавантажте розділ історії.');
-                        }
+                        if (!silent) Lampa.Noty.show('Прогрес відновлено!');
                     }
                 }
             });
