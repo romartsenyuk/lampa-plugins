@@ -23,10 +23,10 @@
                 ],
                 onSelect: function (item) {
                     if (item.action === 'api') {
-                        var v = prompt('Введіть Master Key:', key);
+                        var v = prompt('Введіть Master Key (з сайту jsonbin.io):', key);
                         if (v) { localStorage.setItem('cs_key', v.trim()); _this.showSettings(); }
                     } else if (item.action === 'bin') {
-                        var v = prompt('Введіть BIN ID:', bin);
+                        var v = prompt('BIN ID (залиште порожнім для створення):', bin);
                         localStorage.setItem('cs_bin', v ? v.trim() : ''); _this.showSettings();
                     } else if (item.action === 'sync') { _this.sync(); }
                     else if (item.action === 'pull') { _this.pull(); }
@@ -36,11 +36,11 @@
         sync: function () {
             var key = localStorage.getItem('cs_key');
             var bin = localStorage.getItem('cs_bin');
-            if (!key) return Lampa.Noty.show('Потрібен API Ключ');
+            if (!key) return Lampa.Noty.show('Введіть API Ключ');
             
-            var data = Lampa.Storage.get('continue') || { test: "init" }; // Якщо порожньо, шлемо заглушку
+            var data = Lampa.Storage.get('continue') || {status: "empty"};
             
-            Lampa.Noty.show('З'єднуюсь з сервером...');
+            Lampa.Noty.show('Спроба відправки...');
             
             $.ajax({
                 url: bin ? 'https://api.jsonbin.io/v3/b/' + bin : 'https://api.jsonbin.io/v3/b',
@@ -51,38 +51,32 @@
                     'X-Bin-Private': 'true'
                 },
                 data: JSON.stringify(data),
-                dataType: 'json',
                 success: function (res) {
-                    var newBin = bin || res.metadata.id;
-                    localStorage.setItem('cs_bin', newBin);
+                    var newId = bin || res.metadata.id;
+                    localStorage.setItem('cs_bin', newId);
                     Lampa.Noty.show('Успішно збережено!');
-                    console.log('Sync Success. BIN:', newBin);
                 },
                 error: function (xhr) {
-                    var errorMsg = "Невідома помилка";
-                    if (xhr.responseJSON && xhr.responseJSON.message) errorMsg = xhr.responseJSON.message;
-                    else if (xhr.status === 0) errorMsg = "Блокування запиту (CORS/Network)";
-                    else errorMsg = "Код: " + xhr.status;
-                    
-                    Lampa.Noty.show('Сервер: ' + errorMsg);
-                    console.error('Full error:', xhr);
+                    var text = xhr.responseText || "";
+                    if (text.includes("Invalid credentials")) Lampa.Noty.show("Сервер: Невірний API Ключ");
+                    else if (xhr.status === 400) Lampa.Noty.show("Помилка 400: Перевірте Ключ або BIN");
+                    else Lampa.Noty.show("Помилка: " + xhr.status);
                 }
             });
         },
         pull: function () {
             var key = localStorage.getItem('cs_key');
             var bin = localStorage.getItem('cs_bin');
-            if (!key || !bin) return Lampa.Noty.show('Немає BIN ID');
+            if (!key || !bin) return Lampa.Noty.show('Потрібен BIN ID');
             $.ajax({
                 url: 'https://api.jsonbin.io/v3/b/' + bin + '/latest',
                 headers: { 'X-Master-Key': key },
                 success: function (res) {
                     if (res.record) {
                         Lampa.Storage.set('continue', res.record);
-                        Lampa.Noty.show('Дані отримано!');
+                        Lampa.Noty.show('Успішно оновлено!');
                     }
-                },
-                error: function() { Lampa.Noty.show('Помилка завантаження'); }
+                }
             });
         }
     };
