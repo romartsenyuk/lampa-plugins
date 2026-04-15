@@ -4,13 +4,23 @@
         name: 'Прогрес серій',
         init: function () {
             var _this = this;
-            // Додаємо пункт меню з невеликою затримкою, щоб EXE встиг провантажитись
-            setTimeout(function(){ _this.addMenuItem(); }, 500);
+            
+            // 1. ВИДАЛЯЄМО ВСІ ДУБЛІКАТИ (очищення меню)
+            $('.js-sync-clean').remove(); 
+            
+            // 2. Додаємо один чистий пункт через невелику паузу
+            setTimeout(function(){ 
+                _this.addMenuItem(); 
+            }, 500);
         },
         addMenuItem: function () {
             var _this = this;
-            if ($('.menu__list .js-sync-progress').length) return;
-            var item = $('<li class="menu__item selector focusable js-sync-progress"><div class="menu__ico" style="color: #ff9500 !important;"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2V6M12 18V22M6 12H2M22 12H18M19.07 4.93L16.24 7.76M7.76 16.24L4.93 19.07M19.07 19.07L16.24 16.24M7.76 7.76L4.93 4.93"/></svg></div><div class="menu__text">' + this.name + '</div></li>');
+            
+            // Перевірка, щоб не додати два рази в одну сесію
+            if ($('.menu__list .js-sync-clean').length > 0) return;
+
+            var item = $('<li class="menu__item selector focusable js-sync-clean"><div class="menu__ico" style="color: #ff9500 !important;"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2V6M12 18V22M6 12H2M22 12H18M19.07 4.93L16.24 7.76M7.76 16.24L4.93 19.07M19.07 19.07L16.24 16.24M7.76 7.76L4.93 4.93"/></svg></div><div class="menu__text">' + this.name + '</div></li>');
+            
             item.on('click', function() { _this.showSettings(); });
             $('.menu__list').append(item);
         },
@@ -41,22 +51,23 @@
         sync: function () {
             var key = localStorage.getItem('cs_key');
             var bin = localStorage.getItem('cs_bin');
-            if (!key) return Lampa.Noty.show('Введіть API Ключ');
+            if (!key) return Lampa.Noty.show('Потрібен API Ключ');
+            
             var data = Lampa.Storage.get('continue') || {};
-            Lampa.Noty.show('Відправка...');
+            Lampa.Noty.show('Синхронізація...');
+            
             $.ajax({
                 url: bin ? 'https://api.jsonbin.io/v3/b/' + bin : 'https://api.jsonbin.io/v3/b',
                 type: bin ? 'PUT' : 'POST',
                 headers: { 'X-Master-Key': key, 'Content-Type': 'application/json', 'X-Bin-Private': 'true' },
-                data: JSON.stringify({backup: data}), // Огортаємо в об'єкт для стабільності
+                data: JSON.stringify({backup: data}),
                 success: function (res) {
                     var newId = bin || res.metadata.id;
                     localStorage.setItem('cs_bin', newId);
-                    Lampa.Noty.show('Успішно збережено!');
+                    Lampa.Noty.show('Збережено успішно!');
                 },
                 error: function (xhr) {
-                    var err = xhr.responseJSON ? xhr.responseJSON.message : 'Помилка ' + xhr.status;
-                    Lampa.Noty.show(err);
+                    Lampa.Noty.show('Помилка сервера');
                 }
             });
         },
@@ -70,7 +81,7 @@
                 success: function (res) {
                     if (res.record && res.record.backup) {
                         Lampa.Storage.set('continue', res.record.backup);
-                        Lampa.Noty.show('Дані отримано!');
+                        Lampa.Noty.show('Дані відновлено!');
                     }
                 }
             });
