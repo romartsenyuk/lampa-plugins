@@ -1,91 +1,117 @@
 (function () {
     'use strict';
+
     var LampaSync = {
-        name: 'Прогрес серій',
+        name: 'Синхронізація+',
         init: function () {
             var _this = this;
-            // Очищення дублів
-            $('.menu__item').filter(function() {
-                return $(this).text().indexOf('Прогрес серій') > -1;
-            }).remove();
-            $('.js-sync-clean').remove(); 
             
-            setTimeout(function(){ _this.addMenuItem(); }, 1000);
+            // Видаляємо всі старі версії, щоб не було дублів у меню
+            $('.js-sync-clean').remove();
+            $('.menu__item').filter(function() {
+                return $(this).text().indexOf('Прогрес серій') > -1 || $(this).text().indexOf('Синхронізація+') > -1;
+            }).remove();
+
+            // Додаємо кнопку в меню через паузу для стабільності EXE
+            setTimeout(function(){ 
+                _this.addMenuItem();
+                _this.autoPull(); // Тихе завантаження при старті
+            }, 1500);
+
+            // Слухаємо подію закінчення перегляду для авто-збереження
+            Lampa.Player.listener.follow('destroy', function(){
+                setTimeout(function(){ _this.sync(true); }, 5000); 
+            });
         },
+
         addMenuItem: function () {
             var _this = this;
             if ($('.js-sync-clean').length > 0) return;
-            var item = $('<li class="menu__item selector focusable js-sync-clean"><div class="menu__ico" style="color: #ff9500 !important;"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2V6M12 18V22M6 12H2M22 12H18M19.07 4.93L16.24 7.76M7.76 16.24L4.93 19.07M19.07 19.07L16.24 16.24M7.76 7.76L4.93 4.93"/></svg></div><div class="menu__text">' + this.name + '</div></li>');
+
+            var item = $('<li class="menu__item selector focusable js-sync-clean"><div class="menu__ico" style="color: #ff9500 !important;"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg></div><div class="menu__text">' + this.name + '</div></li>');
             item.on('click', function() { _this.showSettings(); });
             $('.menu__list').append(item);
         },
+
         showSettings: function () {
             var _this = this;
             var key = localStorage.getItem('cs_key') || '';
             var bin = localStorage.getItem('cs_bin') || '';
+            
             Lampa.Select.show({
                 title: this.name,
                 items: [
-                    { title: 'API Ключ', subtitle: key ? 'Введено' : 'Порожньо', action: 'api' },
-                    { title: 'BIN ID', subtitle: bin || 'Порожньо', action: 'bin' },
-                    { title: 'НАДІСЛАТИ В ХМАРУ', action: 'sync' },
-                    { title: 'ЗАВАНТАЖИТИ З ХМАРИ', action: 'pull' }
+                    { title: 'API Ключ (Master Key)', subtitle: key ? 'Налаштовано' : 'Потрібно ввести', action: 'api' },
+                    { title: 'BIN ID (Хмара)', subtitle: bin || 'Створиться автоматично', action: 'bin' },
+                    { title: 'Зберегти прогрес зараз', subtitle: 'Ручна синхронізація в хмару', action: 'sync' },
+                    { title: 'Відновити прогрес', subtitle: 'Завантажити останню копію', action: 'pull' }
                 ],
                 onSelect: function (item) {
                     if (item.action === 'api') {
-                        // Використовуємо внутрішній ввід Lampa замість prompt
-                        Lampa.Input.edit({
-                            value: key,
-                            title: 'Введіть Master Key'
-                        }, function (v) {
+                        Lampa.Input.edit({ value: key, title: 'Введіть Master Key' }, function (v) {
                             if (v) { localStorage.setItem('cs_key', v.trim()); _this.showSettings(); }
                         });
                     } else if (item.action === 'bin') {
-                        Lampa.Input.edit({
-                            value: bin,
-                            title: 'Введіть BIN ID'
-                        }, function (v) {
+                        Lampa.Input.edit({ value: bin, title: 'Введіть BIN ID' }, function (v) {
                             localStorage.setItem('cs_bin', v ? v.trim() : ''); _this.showSettings();
                         });
-                    } else if (item.action === 'sync') { _this.sync(); }
+                    } else if (item.action === 'sync') { _this.sync(false); }
                     else if (item.action === 'pull') { _this.pull(); }
                 }
             });
         },
-        sync: function () {
+
+        sync: function (silent) {
             var key = localStorage.getItem('cs_key');
             var bin = localStorage.getItem('cs_bin');
-            if (!key) return Lampa.Noty.show('Потрібен API Ключ');
+            if (!key) return !silent && Lampa.Noty.show('Помилка: введіть API Ключ');
+            
             var data = Lampa.Storage.get('continue') || {};
-            Lampa.Noty.show('Синхронізація...');
+            if (!silent) Lampa.Noty.show('Збереження у хмару...');
+            
             $.ajax({
                 url: bin ? 'https://api.jsonbin.io/v3/b/' + bin : 'https://api.jsonbin.io/v3/b',
                 type: bin ? 'PUT' : 'POST',
                 headers: { 'X-Master-Key': key, 'Content-Type': 'application/json', 'X-Bin-Private': 'true' },
                 data: JSON.stringify({backup: data}),
                 success: function (res) {
-                    var newId = bin || res.metadata.id;
-                    localStorage.setItem('cs_bin', newId);
-                    Lampa.Noty.show('Збережено!');
+                    if (!bin) localStorage.setItem('cs_bin', res.metadata.id);
+                    if (!silent) Lampa.Noty.show('Синхронізація успішна');
                 },
-                error: function () { Lampa.Noty.show('Помилка сервера'); }
+                error: function (xhr) {
+                    Lampa.Noty.show('Помилка синхронізації: ' + xhr.status);
+                }
             });
         },
-        pull: function () {
+
+        autoPull: function () {
             var key = localStorage.getItem('cs_key');
             var bin = localStorage.getItem('cs_bin');
-            if (!key || !bin) return Lampa.Noty.show('Потрібен BIN ID');
+            if (key && bin) {
+                this.pull(true);
+            }
+        },
+
+        pull: function (silent) {
+            var key = localStorage.getItem('cs_key');
+            var bin = localStorage.getItem('cs_bin');
+            if (!key || !bin) return !silent && Lampa.Noty.show('Помилка: немає даних для відновлення');
+            
             $.ajax({
                 url: 'https://api.jsonbin.io/v3/b/' + bin + '/latest',
                 headers: { 'X-Master-Key': key },
                 success: function (res) {
                     if (res.record && res.record.backup) {
                         Lampa.Storage.set('continue', res.record.backup);
-                        Lampa.Noty.show('Дані відновлено!');
+                        if (!silent) Lampa.Noty.show('Дані відновлено');
                     }
+                },
+                error: function() {
+                    if (!silent) Lampa.Noty.show('Помилка завантаження');
                 }
             });
         }
     };
+
     LampaSync.init();
 })();
