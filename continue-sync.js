@@ -39,13 +39,8 @@
             else $('.menu__list').append(item);
         },
 
-        // Використовуємо внутрішній метод введення Lampa
         input: function (title, value, callback) {
-            Lampa.Input.edit({
-                title: title,
-                value: value,
-                free: true
-            }, function (new_value) {
+            Lampa.Input.edit({ title: title, value: value, free: true }, function (new_value) {
                 if (new_value) callback(new_value.trim());
             });
         },
@@ -60,8 +55,8 @@
                 items: [
                     { title: 'API Ключ', subtitle: key ? 'Введено' : 'Порожньо', action: 'api' },
                     { title: 'BIN ID', subtitle: bin || 'Створиться автоматично', action: 'bin' },
-                    { title: 'НАДІСЛАТИ В ХМАРУ', action: 'sync' },
-                    { title: 'ЗАВАНТАЖИТИ З ХМАРИ', action: 'pull' }
+                    { title: 'НАДІСЛАТИ В ХМАРУ', subtitle: 'Push (з цього пристрою)', action: 'sync' },
+                    { title: 'ЗАВАНТАЖИТИ З ХМАРИ', subtitle: 'Pull (на цей пристрій)', action: 'pull' }
                 ],
                 onSelect: function (item) {
                     if (item.action === 'api') {
@@ -87,11 +82,20 @@
         syncToCloud: function (silent) {
             var key = localStorage.getItem('continue_sync_apiKey');
             var bin = localStorage.getItem('continue_sync_binId');
-            if (!key) return !silent && Lampa.Noty.show('Введіть Ключ!');
+            if (!key) return;
 
-            var localData = Lampa.Storage.get('continue') || {};
+            // Глибокий пошук даних (перевіряємо всі сховища Lampa)
+            var localData = Lampa.Storage.get('continue') || Lampa.Storage.get('continue_back') || {};
+            
+            // Якщо даних зовсім немає, не відправляємо пустку
+            if (Object.keys(localData).length <= 1 && !localData.timestamp) {
+                if(!silent) Lampa.Noty.show('Немає даних для відправки');
+                return;
+            }
+
+            var url = bin ? 'https://api.jsonbin.io/v3/b/' + bin : 'https://api.jsonbin.io/v3/b';
             var xhr = new XMLHttpRequest();
-            xhr.open(bin ? 'PUT' : 'POST', bin ? 'https://api.jsonbin.io/v3/b/' + bin : 'https://api.jsonbin.io/v3/b', true);
+            xhr.open(bin ? 'PUT' : 'POST', url, true);
             xhr.setRequestHeader('Content-Type', 'application/json');
             xhr.setRequestHeader('X-Master-Key', key);
             xhr.setRequestHeader('X-Bin-Private', 'true');
@@ -101,12 +105,13 @@
                     var res = JSON.parse(xhr.responseText);
                     if (res.metadata && res.metadata.id) {
                         localStorage.setItem('continue_sync_binId', res.metadata.id);
-                        if (!silent) Lampa.Noty.show('Збережено в хмару!');
+                        if (!silent) Lampa.Noty.show('Дані відправлено!');
                     }
-                } else if (!silent) {
-                    Lampa.Noty.show('Помилка: ' + xhr.status);
+                } else {
+                    if (!silent) Lampa.Noty.show('Помилка відправки: ' + xhr.status);
                 }
             };
+            xhr.onerror = function() { if(!silent) Lampa.Noty.show('Помилка мережі на ПК'); };
             xhr.send(JSON.stringify(localData));
         },
 
@@ -125,6 +130,7 @@
                     var cloudData = res.record || {};
                     var localData = Lampa.Storage.get('continue') || {};
                     var updated = false;
+
                     for (var id in cloudData) {
                         if (!localData[id] || (cloudData[id].time > localData[id].time)) {
                             localData[id] = cloudData[id];
@@ -133,11 +139,11 @@
                     }
                     if (updated) {
                         Lampa.Storage.set('continue', localData);
-                        Lampa.Storage.set('continue_back', localData); // Для надійності
+                        Lampa.Storage.cache('continue', localData); // Оновлюємо кеш
+                        if (!silent) Lampa.Noty.show('Історію оновлено! Перезайдіть у розділ');
+                    } else {
+                        if (!silent) Lampa.Noty.show('Нових серій не знайдено');
                     }
-                    if (!silent) Lampa.Noty.show(updated ? 'Оновлено!' : 'Дані актуальні');
-                } else if (!silent) {
-                    Lampa.Noty.show('Помилка: ' + xhr.status);
                 }
             };
             xhr.send();
