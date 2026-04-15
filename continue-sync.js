@@ -8,10 +8,7 @@
             this.cleanup();
             this.addMenuItem();
             
-            var key = localStorage.getItem('continue_sync_apiKey');
-            var bin = localStorage.getItem('continue_sync_binId');
-            
-            if (key && bin) {
+            if (localStorage.getItem('continue_sync_apiKey') && localStorage.getItem('continue_sync_binId')) {
                 this.syncFromCloud(true);
             }
 
@@ -43,6 +40,17 @@
             else $('.menu__list').append(item);
         },
 
+        // Виклик вбудованої клавіатури Lampa
+        openKeyboard: function (title, value, callback) {
+            Lampa.Input.edit({
+                title: title,
+                value: value,
+                free: true
+            }, function (new_value) {
+                if (new_value !== undefined) callback(new_value.trim());
+            });
+        },
+
         showSettings: function () {
             var _this = this;
             var key = localStorage.getItem('continue_sync_apiKey') || '';
@@ -52,21 +60,21 @@
                 title: this.name,
                 items: [
                     { title: 'API Ключ', subtitle: key || 'Натисніть для вводу', action: 'api' },
-                    { title: 'BIN ID', subtitle: bin || 'Порожньо (створиться автоматично)', action: 'bin' },
-                    { title: 'СИНХРОНІЗУВАТИ ЗАРАЗ', subtitle: 'Надіслати дані в хмару', action: 'sync' },
-                    { title: 'ОТРИМАТИ З ХМАРИ', subtitle: 'Завантажити дані на цей пристрій', action: 'pull' }
+                    { title: 'BIN ID', subtitle: bin || 'Створиться автоматично', action: 'bin' },
+                    { title: 'СИНХРОНІЗУВАТИ ЗАРАЗ', subtitle: 'Відправити дані (Push)', action: 'sync' },
+                    { title: 'ОТРИМАТИ З ХМАРИ', subtitle: 'Завантажити дані (Pull)', action: 'pull' }
                 ],
                 onSelect: function (item) {
                     if (item.action === 'api') {
-                        var val = prompt('Введіть X-Master-Key:', key);
-                        if (val) {
-                            localStorage.setItem('continue_sync_apiKey', val.trim());
+                        _this.openKeyboard('Введіть X-Master-Key', key, function(v) {
+                            localStorage.setItem('continue_sync_apiKey', v);
                             _this.showSettings();
-                        }
+                        });
                     } else if (item.action === 'bin') {
-                        var val = prompt('Введіть BIN ID вручну (з ПК):', bin);
-                        localStorage.setItem('continue_sync_binId', val ? val.trim() : '');
-                        _this.showSettings();
+                        _this.openKeyboard('Введіть BIN ID', bin, function(v) {
+                            localStorage.setItem('continue_sync_binId', v);
+                            _this.showSettings();
+                        });
                     } else if (item.action === 'sync') {
                         _this.syncToCloud(false);
                     } else if (item.action === 'pull') {
@@ -138,8 +146,6 @@
                     } else if (!silent) {
                         Lampa.Noty.show('Дані вже актуальні');
                     }
-                } else if (xhr.readyState === 4 && !silent) {
-                    Lampa.Noty.show('Помилка отримання: ' + xhr.status);
                 }
             };
             xhr.send();
