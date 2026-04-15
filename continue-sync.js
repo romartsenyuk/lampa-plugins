@@ -13,10 +13,12 @@
             this.cleanup();
             this.addMenuItem();
             
+            // Авто-синхронізація при старті (тиха)
             if (this.apiKey && this.binId) {
-                setTimeout(() => this.syncFromCloud(true), 3000);
+                this.syncFromCloud(true);
             }
 
+            // Збереження при виході з плеєра
             Lampa.Player.listener.follow('destroy', () => {
                 this.syncToCloud(true);
             });
@@ -36,6 +38,7 @@
                 '</li>');
 
             item.on('hover:enter click', () => _this.showSettings());
+            
             var target = $('.menu__list .menu__item').filter(function() {
                 return $(this).text().indexOf('Пізнавальне') !== -1;
             });
@@ -49,8 +52,8 @@
                 title: this.name,
                 items: [
                     { title: 'Ключ API', subtitle: this.apiKey || 'Натисніть для вводу', type: 'api' },
-                    { title: 'BIN ID', subtitle: this.binId || 'Створиться при синхронізації', type: 'bin' },
-                    { title: 'Синхронізувати зараз', subtitle: 'Push/Pull дані', type: 'sync' }
+                    { title: 'BIN ID', subtitle: this.binId || 'Створиться автоматично', type: 'bin' },
+                    { title: 'Синхронізувати зараз', subtitle: 'Перевірити зв’язок', type: 'sync' }
                 ],
                 onSelect: function (item) {
                     if (item.type === 'api') {
@@ -68,6 +71,7 @@
                             _this.showSettings();
                         }
                     } else if (item.type === 'sync') {
+                        Lampa.Noty.show('Запуск синхронізації...');
                         _this.syncToCloud(false);
                     }
                 },
@@ -76,12 +80,18 @@
         },
 
         getContinueData: function() {
-            var data = Lampa.Storage.get('continue') || localStorage.getItem('continue') || '{}';
-            return (typeof data === 'string') ? JSON.parse(data) : data;
+            try {
+                var data = Lampa.Storage.get('continue') || localStorage.getItem('continue') || '{}';
+                return (typeof data === 'string') ? JSON.parse(data) : data;
+            } catch(e) { return {}; }
         },
 
         syncToCloud: async function (silent) {
-            if (!this.apiKey) return !silent && alert('Потрібен API Key!');
+            if (!this.apiKey) {
+                if (!silent) Lampa.Noty.show('Помилка: Немає ключа API');
+                return;
+            }
+
             const data = this.getContinueData();
             const url = this.binId ? `https://api.jsonbin.io/v3/b/${this.binId}` : 'https://api.jsonbin.io/v3/b';
             
@@ -96,38 +106,51 @@
                     body: JSON.stringify(data)
                 });
                 
+                if (!response.ok) throw new Error('Статус сервера: ' + response.status);
+
                 const result = await response.json();
                 if (result.metadata && result.metadata.id) {
                     this.binId = result.metadata.id;
                     localStorage.setItem('continue_sync_binId', this.binId);
-                    if (!silent) Lampa.Noty.show('Збережено успішно');
+                    if (!silent) Lampa.Noty.show('Успішно збережено в хмару!');
                 }
             } catch (e) {
-                if (!silent) alert('Помилка мережі: ' + e.message);
+                console.error('LampaSync Error:', e);
+                if (!silent) Lampa.Noty.show('Помилка: ' + e.message);
             }
         },
 
         syncFromCloud: async function (silent) {
             if (!this.apiKey || !this.binId) return;
+
             try {
                 const response = await fetch(`https://api.jsonbin.io/v3/b/${this.binId}/latest`, {
                     headers: { 'X-Master-Key': this.apiKey }
                 });
+                
+                if (!response.ok) throw new Error('Статус: ' + response.status);
+
                 const result = await response.json();
-                const cloudData = result.record;
+                const cloudData = result.record || {};
                 const localData = this.getContinueData();
 
+                let updated = false;
                 for (let key in cloudData) {
                     if (!localData[key] || (cloudData[key].time > localData[key].time)) {
                         localData[key] = cloudData[key];
+                        updated = true;
                     }
                 }
 
-                Lampa.Storage.set('continue', localData);
-                localStorage.setItem('continue', JSON.stringify(localData));
-                if (!silent) Lampa.Noty.show('Прогрес оновлено');
+                if (updated) {
+                    Lampa.Storage.set('continue', localData);
+                    localStorage.setItem('continue', JSON.stringify(localData));
+                    if (!silent) Lampa.Noty.show('Дані з хмари отримано!');
+                } else {
+                    if (!silent) Lampa.Noty.show('Локальні дані вже актуальні');
+                }
             } catch (e) {
-                if (!silent) console.error('Sync error:', e);
+                if (!silent) Lampa.Noty.show('Помилка завантаження: ' + e.message);
             }
         }
     };
