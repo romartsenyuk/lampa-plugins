@@ -6,22 +6,25 @@
         init: function () {
             var _this = this;
             
-            // ЖОРСТКЕ ОЧИЩЕННЯ МЕНЮ ВІД ДУБЛІКАТІВ
-            var clearMenu = function() {
+            // РАДИКАЛЬНЕ ОЧИЩЕННЯ МЕНЮ
+            var totalClean = function() {
+                // Видаляємо за класами, за текстом і за іконками
+                $('.js-backup-button, .js-sync-clean, .js-cloud-clean').remove();
                 $('.menu__item').filter(function() {
-                    var t = $(this).text().toLowerCase();
-                    return t.indexOf('синхро') > -1 || t.indexOf('хмарний') > -1 || t.indexOf('прогрес') > -1;
+                    var text = $(this).text().toLowerCase();
+                    return text.indexOf('синхро') > -1 || text.indexOf('хмарний') > -1 || text.indexOf('прогрес') > -1;
                 }).remove();
             };
+
+            totalClean();
+            // Повторюємо очищення через паузи, бо Лампа може довантажувати меню динамічно
+            setTimeout(totalClean, 500);
+            setTimeout(totalClean, 2000);
+
+            setTimeout(function(){ _this.addMenuItem(); }, 2500);
             
-            clearMenu();
-            setTimeout(clearMenu, 100); // Повторне очищення для надійності
-            setTimeout(function(){ _this.addMenuItem(); }, 1500);
-            
-            // 1. Тихо завантажуємо при старті
             setTimeout(function(){ _this.pull(true); }, 1000);
 
-            // 2. Слідкуємо за паузою та закриттям плеєра
             Lampa.Player.listener.follow('state', function(e){
                 if(e.state == 'pause') _this.sync(true);
             });
@@ -29,12 +32,10 @@
                 _this.sync(true);
             });
 
-            // 3. Оновлення при поверненні до вкладки (для ПК)
             window.addEventListener('focus', function() {
                 _this.pull(true);
             });
 
-            // 4. Оновлення при вході в розділ "Продовжити"
             Lampa.Listener.follow('activity', function (e) {
                 if (e.component === 'continue' && e.type === 'start') {
                     _this.pull(true);
@@ -43,7 +44,6 @@
         },
         addMenuItem: function () {
             var _this = this;
-            // Перевірка, чи вже є кнопка, щоб не плодити їх
             if ($('.js-backup-button').length > 0) return;
             
             var item = $('<li class="menu__item selector focusable js-backup-button"><div class="menu__ico" style="color: #00ff95 !important;"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></div><div class="menu__text">' + this.name + '</div></li>');
@@ -102,15 +102,12 @@
             if (!key || !bin) return;
             $.ajax({
                 url: 'https://api.jsonbin.io/v3/b/' + bin + '/latest',
-                headers: { 'X-Master-Key': key, 'X-Bin-Meta': 'false' }, // Швидше завантаження без метаданих
+                headers: { 'X-Master-Key': key, 'X-Bin-Meta': 'false' },
                 success: function (res) {
                     if (res) {
                         if (res.continue) Lampa.Storage.set('continue', res.continue);
                         if (res.favorite) Lampa.Storage.set('favorite', res.favorite);
-                        
-                        // Оновлюємо відображення історії
                         if (window.Lampa && Lampa.Continue) Lampa.Continue.init();
-                        
                         if (!silent) {
                             Lampa.Noty.show('Дані оновлено!');
                             setTimeout(function(){ window.location.reload(); }, 500);
