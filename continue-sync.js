@@ -11,7 +11,6 @@
                 }).remove();
             };
             clear();
-            setTimeout(clear, 2000);
             setTimeout(function(){ _this.addMenuItem(); }, 2000);
             setTimeout(function(){ _this.pull(true); }, 3000);
         },
@@ -31,8 +30,8 @@
                 items: [
                     { title: 'КЛЮЧ: ' + (key ? key.substring(0, 8) + '...' : 'НЕМАЄ'), action: 'api' },
                     { title: 'BIN ID: ' + (bin || 'НЕМАЄ'), action: 'bin' },
-                    { title: 'СИНХРОНІЗУВАТИ ЗАРАЗ', action: 'sync_manual' },
-                    { title: 'ВІДНОВИТИ ВРУЧНУ', action: 'pull_manual' }
+                    { title: 'ВІДПРАВИТИ ДАНІ', action: 'sync_manual' },
+                    { title: 'ОТРИМАТИ ДАНІ', action: 'pull_manual' }
                 ],
                 onSelect: function (item) {
                     if (item.action === 'api') {
@@ -51,13 +50,12 @@
         sync: function (silent) {
             var key = localStorage.getItem('cs_key'), bin = localStorage.getItem('cs_bin');
             if (!key || !bin) return;
-            
-            // Збираємо дані максимально широко
+
             var dataToSync = {
                 continue: Lampa.Storage.get('continue') || {},
                 favorite: Lampa.Storage.get('favorite') || {},
-                online_view: Lampa.Storage.get('online_view') || {},
-                view: Lampa.Storage.get('view') || {}
+                view: Lampa.Storage.get('view') || {},
+                online_view: Lampa.Storage.get('online_view') || {}
             };
 
             $.ajax({
@@ -65,15 +63,14 @@
                 type: 'PUT',
                 headers: { 
                     'X-Master-Key': key, 
-                    'Content-Type': 'application/json',
-                    'X-Bin-Versioning': 'false' // Вимикаємо версії, щоб перезаписати файл
+                    'Content-Type': 'application/json'
                 },
                 data: JSON.stringify(dataToSync),
                 success: function() { 
-                    if(!silent) Lampa.Noty.show('Дані успішно перезаписано!'); 
+                    if(!silent) Lampa.Noty.show('ГОТОВО! Перевірте сайт.'); 
                 },
                 error: function(xhr) { 
-                    if(!silent) Lampa.Noty.show('Помилка запису: ' + xhr.status); 
+                    if(!silent) Lampa.Noty.show('Помилка сервера: ' + xhr.status); 
                 }
             });
         },
@@ -88,11 +85,10 @@
                     if (data) {
                         if (data.continue) Lampa.Storage.set('continue', data.continue);
                         if (data.favorite) Lampa.Storage.set('favorite', data.favorite);
-                        if (data.online_view) Lampa.Storage.set('online_view', data.online_view);
                         if (data.view) Lampa.Storage.set('view', data.view);
-                        
+                        if (data.online_view) Lampa.Storage.set('online_view', data.online_view);
                         if (!silent) {
-                            Lampa.Noty.show('Дані відновлено!');
+                            Lampa.Noty.show('Дані отримано!');
                             setTimeout(function(){ window.location.reload(); }, 500);
                         }
                     }
