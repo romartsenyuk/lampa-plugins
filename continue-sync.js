@@ -5,12 +5,18 @@
         last_sync_time: 0,
         init: function () {
             var _this = this;
-            $('.js-backup-clean').remove();
-            $('.menu__item').filter(function() {
-                return $(this).text().indexOf('Синхро') > -1 || $(this).text().indexOf('Хмарний') > -1;
-            }).remove();
-
-            setTimeout(function(){ _this.addMenuItem(); }, 2000);
+            
+            // ЖОРСТКЕ ОЧИЩЕННЯ МЕНЮ ВІД ДУБЛІКАТІВ
+            var clearMenu = function() {
+                $('.menu__item').filter(function() {
+                    var t = $(this).text().toLowerCase();
+                    return t.indexOf('синхро') > -1 || t.indexOf('хмарний') > -1 || t.indexOf('прогрес') > -1;
+                }).remove();
+            };
+            
+            clearMenu();
+            setTimeout(clearMenu, 100); // Повторне очищення для надійності
+            setTimeout(function(){ _this.addMenuItem(); }, 1500);
             
             // 1. Тихо завантажуємо при старті
             setTimeout(function(){ _this.pull(true); }, 1000);
@@ -23,12 +29,12 @@
                 _this.sync(true);
             });
 
-            // 3. ПЕРЕХВАТ: Оновлюємо дані, коли користувач повертається в додаток (фокус вікна)
+            // 3. Оновлення при поверненні до вкладки (для ПК)
             window.addEventListener('focus', function() {
                 _this.pull(true);
             });
 
-            // 4. Оновлюємо при переході в розділ "Продовжити"
+            // 4. Оновлення при вході в розділ "Продовжити"
             Lampa.Listener.follow('activity', function (e) {
                 if (e.component === 'continue' && e.type === 'start') {
                     _this.pull(true);
@@ -37,8 +43,10 @@
         },
         addMenuItem: function () {
             var _this = this;
-            if ($('.js-backup-clean').length > 0) return;
-            var item = $('<li class="menu__item selector focusable js-backup-clean"><div class="menu__ico" style="color: #00ff95 !important;"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></div><div class="menu__text">' + this.name + '</div></li>');
+            // Перевірка, чи вже є кнопка, щоб не плодити їх
+            if ($('.js-backup-button').length > 0) return;
+            
+            var item = $('<li class="menu__item selector focusable js-backup-button"><div class="menu__ico" style="color: #00ff95 !important;"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></div><div class="menu__text">' + this.name + '</div></li>');
             item.on('click', function() { _this.showSettings(); });
             $('.menu__list').append(item);
         },
@@ -73,7 +81,7 @@
             if (!key || !bin) return;
 
             var now = Date.now();
-            if(silent && now - this.last_sync_time < 5000) return; // Захист 5 сек
+            if(silent && now - this.last_sync_time < 5000) return; 
             this.last_sync_time = now;
 
             var allData = {
@@ -94,14 +102,13 @@
             if (!key || !bin) return;
             $.ajax({
                 url: 'https://api.jsonbin.io/v3/b/' + bin + '/latest',
-                headers: { 'X-Master-Key': key },
+                headers: { 'X-Master-Key': key, 'X-Bin-Meta': 'false' }, // Швидше завантаження без метаданих
                 success: function (res) {
-                    if (res.record) {
-                        var d = res.record;
-                        if (d.continue) Lampa.Storage.set('continue', d.continue);
-                        if (d.favorite) Lampa.Storage.set('favorite', d.favorite);
+                    if (res) {
+                        if (res.continue) Lampa.Storage.set('continue', res.continue);
+                        if (res.favorite) Lampa.Storage.set('favorite', res.favorite);
                         
-                        // Оновлюємо плитку на екрані без перезавантаження
+                        // Оновлюємо відображення історії
                         if (window.Lampa && Lampa.Continue) Lampa.Continue.init();
                         
                         if (!silent) {
