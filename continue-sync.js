@@ -4,6 +4,8 @@
         name: 'Лампа Синхро',
         init: function () {
             var _this = this;
+            
+            // Видаляємо дублікати
             var fixMenu = function() {
                 $('.menu__item').filter(function() {
                     var t = $(this).text().toLowerCase();
@@ -14,9 +16,10 @@
             setTimeout(fixMenu, 3000);
             setTimeout(function(){ _this.addMenuItem(); }, 2000);
             
-            // Авто-завантаження при старті (тихо)
+            // Авто-пулл при старті (тихо)
             setTimeout(function(){ _this.pull(true); }, 1500);
 
+            // Пауза = Збереження
             Lampa.Player.listener.follow('state', function(e){
                 if(e.state == 'pause') _this.sync(true);
             });
@@ -60,17 +63,21 @@
         sync: function (silent) {
             var key = localStorage.getItem('cs_key'), bin = localStorage.getItem('cs_bin');
             if (!key || !bin) return;
+
             var allData = {
                 continue: Lampa.Storage.get('continue') || {},
                 favorite: Lampa.Storage.get('favorite') || {}
             };
+
             $.ajax({
                 url: 'https://api.jsonbin.io/v3/b/' + bin,
                 type: 'PUT',
                 headers: { 
                     'X-Master-Key': key, 
-                    'Content-Type': 'application/json'
+                    'Content-Type': 'application/json',
+                    'X-Bin-Private': 'true' // Примусово вказуємо, що біл приватний
                 },
+                processData: false,
                 data: JSON.stringify(allData),
                 success: function() { if(!silent) Lampa.Noty.show('Дані відправлено!'); },
                 error: function(xhr) { if(!silent) Lampa.Noty.show('Помилка: ' + xhr.status); }
@@ -81,18 +88,31 @@
             if (!key || !bin) return;
             $.ajax({
                 url: 'https://api.jsonbin.io/v3/b/' + bin + '/latest',
-                headers: { 'X-Master-Key': key, 'X-Bin-Meta': 'false' },
+                type: 'GET',
+                headers: { 
+                    'X-Master-Key': key,
+                    'X-Bin-Meta': 'false' 
+                },
                 success: function (res) {
-                    // JSONBin повертає об'єкт record, якщо X-Bin-Meta: false не спрацював
+                    // Перевіряємо, чи дані прийшли у правильному форматі
                     var data = res.record ? res.record : res;
                     if (data && data.continue) {
                         Lampa.Storage.set('continue', data.continue);
                         if (data.favorite) Lampa.Storage.set('favorite', data.favorite);
+                        
+                        // Оновлюємо інтерфейс Лампи
                         if (window.Lampa && Lampa.Continue) Lampa.Continue.init();
-                        if (!silent) Lampa.Noty.show('Дані синхронізовано!');
+                        if (window.Lampa && Lampa.Favorite) Lampa.Favorite.init();
+                        
+                        if (!silent) {
+                            Lampa.Noty.show('Дані синхронізовано!');
+                            setTimeout(function(){ window.location.reload(); }, 500);
+                        }
+                    } else if (!silent) {
+                        Lampa.Noty.show('Хмара порожня');
                     }
                 },
-                error: function(xhr) { if(!silent) Lampa.Noty.show('Помилка завантаження: ' + xhr.status); }
+                error: function(xhr) { if(!silent) Lampa.Noty.show('Помилка Pull: ' + xhr.status); }
             });
         }
     };
