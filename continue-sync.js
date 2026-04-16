@@ -12,7 +12,14 @@
             };
             clear();
             setTimeout(function(){ _this.addMenuItem(); }, 2000);
+            
+            // Автоматичне отримання даних при старті
             setTimeout(function(){ _this.pull(true); }, 3000);
+
+            // Синхронізація при паузі або виході
+            Lampa.Player.listener.follow('state', function(e){
+                if(e.state == 'pause' || e.state == 'stop') _this.sync(true);
+            });
         },
         addMenuItem: function () {
             var _this = this;
@@ -30,8 +37,8 @@
                 items: [
                     { title: 'КЛЮЧ: ' + (key ? key.substring(0, 8) + '...' : 'НЕМАЄ'), action: 'api' },
                     { title: 'BIN ID: ' + (bin || 'НЕМАЄ'), action: 'bin' },
-                    { title: 'ВІДПРАВИТИ ДАНІ', action: 'sync_manual' },
-                    { title: 'ОТРИМАТИ ДАНІ', action: 'pull_manual' }
+                    { title: 'ВІДПРАВИТИ ВСЕ (Push)', action: 'sync_manual' },
+                    { title: 'ОТРИМАТИ ВСЕ (Pull)', action: 'pull_manual' }
                 ],
                 onSelect: function (item) {
                     if (item.action === 'api') {
@@ -51,26 +58,25 @@
             var key = localStorage.getItem('cs_key'), bin = localStorage.getItem('cs_bin');
             if (!key || !bin) return;
 
+            // Збираємо дані з усіх можливих джерел Lampa
             var dataToSync = {
                 continue: Lampa.Storage.get('continue') || {},
                 favorite: Lampa.Storage.get('favorite') || {},
                 view: Lampa.Storage.get('view') || {},
-                online_view: Lampa.Storage.get('online_view') || {}
+                online_view: Lampa.Storage.get('online_view') || {},
+                history: Lampa.Storage.get('history') || {}
             };
 
             $.ajax({
                 url: 'https://api.jsonbin.io/v3/b/' + bin,
                 type: 'PUT',
-                headers: { 
-                    'X-Master-Key': key, 
-                    'Content-Type': 'application/json'
-                },
+                headers: { 'X-Master-Key': key, 'Content-Type': 'application/json' },
                 data: JSON.stringify(dataToSync),
                 success: function() { 
-                    if(!silent) Lampa.Noty.show('ГОТОВО! Перевірте сайт.'); 
+                    if(!silent) Lampa.Noty.show('Дані в хмарі!'); 
                 },
                 error: function(xhr) { 
-                    if(!silent) Lampa.Noty.show('Помилка сервера: ' + xhr.status); 
+                    if(!silent) Lampa.Noty.show('Помилка: ' + xhr.status); 
                 }
             });
         },
@@ -83,12 +89,15 @@
                 success: function (res) {
                     var data = res.record ? res.record : res;
                     if (data) {
+                        // Записуємо отримані дані назад у сховище Lampa
                         if (data.continue) Lampa.Storage.set('continue', data.continue);
                         if (data.favorite) Lampa.Storage.set('favorite', data.favorite);
                         if (data.view) Lampa.Storage.set('view', data.view);
                         if (data.online_view) Lampa.Storage.set('online_view', data.online_view);
+                        if (data.history) Lampa.Storage.set('history', data.history);
+                        
                         if (!silent) {
-                            Lampa.Noty.show('Дані отримано!');
+                            Lampa.Noty.show('Синхронізовано!');
                             setTimeout(function(){ window.location.reload(); }, 500);
                         }
                     }
