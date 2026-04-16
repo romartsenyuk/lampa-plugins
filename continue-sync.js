@@ -1,13 +1,13 @@
 (function () {
     'use strict';
-    var LampaSyncDeep = {
+    var LampaSyncV8 = {
         name: 'Лампа Синхро',
         init: function () {
             var _this = this;
             var clear = function() {
                 $('.menu__item').filter(function() {
                     var t = $(this).text().toLowerCase();
-                    return (t.indexOf('синхро') > -1 || t.indexOf('хмарний') > -1) && !$(this).hasClass('js-sync-deep');
+                    return (t.indexOf('синхро') > -1 || t.indexOf('хмарний') > -1) && !$(this).hasClass('js-sync-v8');
                 }).remove();
             };
             clear();
@@ -16,8 +16,8 @@
         },
         addMenuItem: function () {
             var _this = this;
-            if ($('.js-sync-deep').length > 0) return;
-            var item = $('<li class="menu__item selector focusable js-sync-deep"><div class="menu__ico" style="color: #00ff95 !important;"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></div><div class="menu__text">' + this.name + '</div></li>');
+            if ($('.js-sync-v8').length > 0) return;
+            var item = $('<li class="menu__item selector focusable js-sync-v8"><div class="menu__ico" style="color: #00ff95 !important;"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></div><div class="menu__text">' + this.name + '</div></li>');
             item.on('click', function() { _this.showSettings(); });
             $('.menu__list').append(item);
         },
@@ -30,8 +30,8 @@
                 items: [
                     { title: 'КЛЮЧ: ' + (key ? key.substring(0, 8) + '...' : 'НЕМАЄ'), action: 'api' },
                     { title: 'BIN ID: ' + (bin || 'НЕМАЄ'), action: 'bin' },
-                    { title: 'ЗБЕРЕГТИ ВСЕ', action: 'sync_manual' },
-                    { title: 'ВІДНОВИТИ ВСЕ', action: 'pull_manual' }
+                    { title: 'ВІДПРАВИТИ ВСЕ', action: 'sync_manual' },
+                    { title: 'ОТРИМАТИ ВСЕ', action: 'pull_manual' }
                 ],
                 onSelect: function (item) {
                     if (item.action === 'api') {
@@ -51,24 +51,21 @@
             var key = localStorage.getItem('cs_key'), bin = localStorage.getItem('cs_bin');
             if (!key || !bin) return;
 
-            // ГЛИБОКИЙ ЗБІР ДАНИХ
-            var fullData = {
-                continue: Lampa.Storage.get('continue') || {},
+            // Збираємо дані не тільки через Storage, а й через прямі об'єкти Lampa
+            var dataToSync = {
+                continue: (window.Lampa && Lampa.Continue ? Lampa.Continue.get() : {}) || Lampa.Storage.get('continue') || {},
                 favorite: Lampa.Storage.get('favorite') || {},
                 view: Lampa.Storage.get('view') || {},
-                online_view: Lampa.Storage.get('online_view') || {},
-                // Додаткові ключі, які можуть містити прогрес
-                history: Lampa.Storage.get('history') || {},
-                player_last_time: Lampa.Storage.get('player_last_time') || {}
+                online_view: Lampa.Storage.get('online_view') || {}
             };
 
             $.ajax({
                 url: 'https://api.jsonbin.io/v3/b/' + bin,
                 type: 'PUT',
                 headers: { 'X-Master-Key': key, 'Content-Type': 'application/json' },
-                data: JSON.stringify(fullData),
+                data: JSON.stringify(dataToSync),
                 success: function() { 
-                    if(!silent) Lampa.Noty.show('Дані в хмарі! Перевірте сайт.'); 
+                    if(!silent) Lampa.Noty.show('Дані відправлено!'); 
                 }
             });
         },
@@ -81,11 +78,13 @@
                 success: function (res) {
                     var data = res.record ? res.record : res;
                     if (data) {
-                        Object.keys(data).forEach(function(k) {
-                            if (data[k]) Lampa.Storage.set(k, data[k]);
-                        });
+                        if (data.continue) Lampa.Storage.set('continue', data.continue);
+                        if (data.favorite) Lampa.Storage.set('favorite', data.favorite);
+                        if (data.view) Lampa.Storage.set('view', data.view);
+                        if (data.online_view) Lampa.Storage.set('online_view', data.online_view);
+                        
                         if (!silent) {
-                            Lampa.Noty.show('Дані відновлено!');
+                            Lampa.Noty.show('Синхронізовано!');
                             setTimeout(function(){ window.location.reload(); }, 500);
                         }
                     }
@@ -93,5 +92,5 @@
             });
         }
     };
-    LampaSyncDeep.init();
+    LampaSyncV8.init();
 })();
