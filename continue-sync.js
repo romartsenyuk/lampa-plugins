@@ -1,10 +1,10 @@
 (function () {
     'use strict';
     var LampaBackuper = {
-        name: 'Лампа Синхро (Все в одному)',
+        name: 'Лампа Синхро',
+        last_sync_time: 0,
         init: function () {
             var _this = this;
-            // Повне очищення меню від будь-яких копій плагіна
             $('.js-backup-clean').remove();
             $('.menu__item').filter(function() {
                 var t = $(this).text();
@@ -13,13 +13,26 @@
 
             setTimeout(function(){ _this.addMenuItem(); }, 2000);
             
-            // Авто-завантаження при старті (через 3 сек після запуску)
-            setTimeout(function(){ _this.pull(true); }, 3000);
+            // 1. Авто-завантаження при старті (ТИХО)
+            setTimeout(function(){ _this.pull(true); }, 1000);
+
+            // 2. Слідкуємо за плеєром
+            Lampa.Player.listener.follow('state', function(e){
+                // Коли ставимо на паузу — миттєво зберігаємо
+                if(e.state == 'pause') {
+                    _this.sync(true);
+                }
+            });
+
+            Lampa.Player.listener.follow('destroy', function(){
+                // Коли закриваємо плеєр — теж зберігаємо
+                _this.sync(true);
+            });
         },
         addMenuItem: function () {
             var _this = this;
-            if ($('.js-backup-clean').length > 0) return;
-            var item = $('<li class="menu__item selector focusable js-backup-clean"><div class="menu__ico" style="color: #00ff95 !important;"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></div><div class="menu__text">' + this.name + '</div></li>');
+            if ($('.js-sync-clean').length > 0) return;
+            var item = $('<li class="menu__item selector focusable js-sync-clean"><div class="menu__ico" style="color: #00ff95 !important;"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></div><div class="menu__text">' + this.name + '</div></li>');
             item.on('click', function() { _this.showSettings(); });
             $('.menu__list').append(item);
         },
@@ -30,66 +43,66 @@
             Lampa.Select.show({
                 title: this.name,
                 items: [
-                    { title: 'API Ключ (Master Key)', subtitle: key ? 'Введено' : 'Порожньо', action: 'api' },
-                    { title: 'BIN ID (Код сховища)', subtitle: bin || 'Створиться автоматично', action: 'bin' },
-                    { title: 'ЗБЕРЕГТИ ВСЕ', subtitle: 'Історія + Обране + Налаштування', action: 'sync' },
-                    { title: 'ВІДНОВИТИ ВСЕ', subtitle: 'Завантажити все з хмари', action: 'pull' }
+                    { title: 'API Ключ (Master Key)', action: 'api' },
+                    { title: 'BIN ID (Код сховища)', action: 'bin' },
+                    { title: 'СИНХРОНІЗУВАТИ ЗАРАЗ', action: 'sync_manual' },
+                    { title: 'ВІДНОВИТИ ВРУЧНУ', action: 'pull_manual' }
                 ],
                 onSelect: function (item) {
                     if (item.action === 'api') {
-                        Lampa.Input.edit({ value: key, title: 'Введіть Master Key' }, function (v) {
+                        Lampa.Input.edit({ value: key, title: 'Master Key' }, function (v) {
                             if (v) { localStorage.setItem('cs_key', v.trim()); _this.showSettings(); }
                         });
                     } else if (item.action === 'bin') {
-                        Lampa.Input.edit({ value: bin, title: 'Введіть BIN ID' }, function (v) {
+                        Lampa.Input.edit({ value: bin, title: 'BIN ID' }, function (v) {
                             localStorage.setItem('cs_bin', v ? v.trim() : ''); _this.showSettings();
                         });
-                    } else if (item.action === 'sync') { _this.sync(); }
-                    else if (item.action === 'pull') { _this.pull(false); }
+                    } else if (item.action === 'sync_manual') { _this.sync(false); }
+                    else if (item.action === 'pull_manual') { _this.pull(false); }
                 }
             });
         },
-        sync: function () {
+        sync: function (silent) {
             var key = localStorage.getItem('cs_key'), bin = localStorage.getItem('cs_bin');
-            if (!key) return Lampa.Noty.show('Потрібен API Ключ');
+            if (!key || !bin) return;
 
-            // Збираємо дані: історія, обране, налаштування
+            // Захист від занадто частих запитів (не частіше ніж раз на 10 сек)
+            var now = Date.now();
+            if(silent && now - this.last_sync_time < 10000) return;
+            this.last_sync_time = now;
+
             var allData = {
                 continue: Lampa.Storage.get('continue') || {},
                 favorite: Lampa.Storage.get('favorite') || {},
                 settings: Lampa.Storage.get('settings') || {}
             };
 
-            Lampa.Noty.show('Синхронізація...');
             $.ajax({
-                url: bin ? 'https://api.jsonbin.io/v3/b/' + bin : 'https://api.jsonbin.io/v3/b',
-                type: bin ? 'PUT' : 'POST',
-                headers: { 'X-Master-Key': key, 'Content-Type': 'application/json', 'X-Bin-Private': 'true' },
+                url: 'https://api.jsonbin.io/v3/b/' + bin,
+                type: 'PUT',
+                headers: { 'X-Master-Key': key, 'Content-Type': 'application/json' },
                 data: JSON.stringify(allData),
-                success: function (res) {
-                    if (!bin) localStorage.setItem('cs_bin', res.metadata.id);
-                    Lampa.Noty.show('Дані в хмарі успішно!');
-                },
-                error: function () { Lampa.Noty.show('Помилка сервера. Перевірте Ключ.'); }
+                success: function () {
+                    if (!silent) Lampa.Noty.show('Збережено!');
+                }
             });
         },
         pull: function (silent) {
             var key = localStorage.getItem('cs_key'), bin = localStorage.getItem('cs_bin');
             if (!key || !bin) return;
-
             $.ajax({
                 url: 'https://api.jsonbin.io/v3/b/' + bin + '/latest',
                 headers: { 'X-Master-Key': key },
                 success: function (res) {
-                    var d = res.record;
-                    if (d) {
+                    if (res.record) {
+                        var d = res.record;
                         if (d.continue) Lampa.Storage.set('continue', d.continue);
                         if (d.favorite) Lampa.Storage.set('favorite', d.favorite);
-                        if (d.settings) Lampa.Storage.set('settings', d.settings);
-
+                        
+                        if (window.Lampa && Lampa.Continue) Lampa.Continue.init();
                         if (!silent) {
-                            Lampa.Noty.show('Відновлено! Перезавантаження...');
-                            setTimeout(function(){ window.location.reload(); }, 1000);
+                            Lampa.Noty.show('Відновлено!');
+                            setTimeout(function(){ window.location.reload(); }, 500);
                         }
                     }
                 }
