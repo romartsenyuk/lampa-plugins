@@ -1,17 +1,17 @@
 (function () {
     'use strict';
-    var LampaSyncFinal = {
+    var LampaSyncUltimate = {
         name: 'Лампа Синхро',
         init: function () {
             var _this = this;
-            $('.js-sync').remove();
+            $('.js-sync-ultimate').remove();
             setTimeout(function(){ _this.addMenuItem(); }, 2000);
             setTimeout(function(){ _this.pull(true); }, 3000);
         },
         addMenuItem: function () {
             var _this = this;
-            if ($('.js-sync').length > 0) return;
-            var item = $('<li class="menu__item selector focusable js-sync"><div class="menu__ico" style="color: #00ff95 !important;"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></div><div class="menu__text">' + this.name + '</div></li>');
+            if ($('.js-sync-ultimate').length > 0) return;
+            var item = $('<li class="menu__item selector focusable js-sync-ultimate"><div class="menu__ico" style="color: #00ff95 !important;"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></div><div class="menu__text">' + this.name + '</div></li>');
             item.on('click', function() { _this.showSettings(); });
             $('.menu__list').append(item);
         },
@@ -24,8 +24,8 @@
                 items: [
                     { title: 'КЛЮЧ: ' + (key ? key.substring(0, 5) + '***' : 'НЕМАЄ'), action: 'api' },
                     { title: 'BIN ID: ' + (bin || 'НЕМАЄ'), action: 'bin' },
-                    { title: 'ВІДПРАВИТИ ДАНІ', action: 'sync' },
-                    { title: 'ОТРИМАТИ ДАНІ', action: 'pull' }
+                    { title: 'ВІДПРАВИТИ ІСТОРІЮ', action: 'sync' },
+                    { title: 'ВІДНОВИТИ ВСЕ', action: 'pull' }
                 ],
                 onSelect: function (item) {
                     if (item.action === 'api') {
@@ -45,12 +45,18 @@
             var key = localStorage.getItem('cs_key'), bin = localStorage.getItem('cs_bin');
             if (!key || !bin) return;
 
-            // Збираємо дані вручну прямо з localStorage, якщо Lampa.Storage.get підводить
+            // Спроба отримати історію через внутрішні методи Lampa
+            var historyData = {};
+            try {
+                if (window.Lampa && Lampa.Continue) {
+                    historyData = Lampa.Continue.get();
+                }
+            } catch(e) {}
+
             var dataToSync = {
-                continue: JSON.parse(localStorage.getItem('lampa_continue') || '{}'),
+                continue: Object.keys(historyData).length ? historyData : JSON.parse(localStorage.getItem('lampa_continue') || '{}'),
                 favorite: JSON.parse(localStorage.getItem('lampa_favorite') || '{}'),
-                view: JSON.parse(localStorage.getItem('lampa_view') || '{}'),
-                online_view: JSON.parse(localStorage.getItem('lampa_online_view') || '{}')
+                view: JSON.parse(localStorage.getItem('lampa_view') || '{}')
             };
 
             $.ajax({
@@ -58,7 +64,9 @@
                 type: 'PUT',
                 headers: { 'X-Master-Key': key, 'Content-Type': 'application/json' },
                 data: JSON.stringify(dataToSync),
-                success: function() { Lampa.Noty.show('Дані відправлено!'); }
+                success: function() { 
+                    Lampa.Noty.show('Дані відправлено! Перевірте розділ continue.'); 
+                }
             });
         },
         pull: function (silent) {
@@ -73,10 +81,9 @@
                         if (data.continue) localStorage.setItem('lampa_continue', JSON.stringify(data.continue));
                         if (data.favorite) localStorage.setItem('lampa_favorite', JSON.stringify(data.favorite));
                         if (data.view) localStorage.setItem('lampa_view', JSON.stringify(data.view));
-                        if (data.online_view) localStorage.setItem('lampa_online_view', JSON.stringify(data.online_view));
                         
                         if (!silent) {
-                            Lampa.Noty.show('Синхронізовано!');
+                            Lampa.Noty.show('Готово! Перезавантаження...');
                             setTimeout(function(){ window.location.reload(); }, 500);
                         }
                     }
@@ -84,5 +91,5 @@
             });
         }
     };
-    LampaSyncFinal.init();
+    LampaSyncUltimate.init();
 })();
