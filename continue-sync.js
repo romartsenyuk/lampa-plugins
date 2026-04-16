@@ -1,17 +1,25 @@
 (function () {
     'use strict';
-    var LampaSyncUltimate = {
-        name: 'Лампа Синхро',
+    var LampaSyncEvent = {
+        name: 'Лампа Синхро PRO',
         init: function () {
             var _this = this;
-            $('.js-sync-ultimate').remove();
+            $('.js-sync-pro').remove();
             setTimeout(function(){ _this.addMenuItem(); }, 2000);
+            
+            // СЛУХАЧ ПЛЕЄРА: як тільки відео зупиняється — дані летять у хмару
+            Lampa.Player.listener.follow('state', function (e) {
+                if (e.state === 'pause' || e.state === 'stop' || e.state === 'end') {
+                    _this.sync(true);
+                }
+            });
+
+            // Авто-отримання при старті
             setTimeout(function(){ _this.pull(true); }, 3000);
         },
         addMenuItem: function () {
             var _this = this;
-            if ($('.js-sync-ultimate').length > 0) return;
-            var item = $('<li class="menu__item selector focusable js-sync-ultimate"><div class="menu__ico" style="color: #00ff95 !important;"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></div><div class="menu__text">' + this.name + '</div></li>');
+            var item = $('<li class="menu__item selector focusable js-sync-pro"><div class="menu__ico" style="color: #00ff95 !important;"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></div><div class="menu__text">Синхро PRO</div></li>');
             item.on('click', function() { _this.showSettings(); });
             $('.menu__list').append(item);
         },
@@ -20,12 +28,12 @@
             var key = localStorage.getItem('cs_key') || '';
             var bin = localStorage.getItem('cs_bin') || '';
             Lampa.Select.show({
-                title: this.name,
+                title: 'Синхронізація',
                 items: [
-                    { title: 'КЛЮЧ: ' + (key ? key.substring(0, 5) + '***' : 'НЕМАЄ'), action: 'api' },
-                    { title: 'BIN ID: ' + (bin || 'НЕМАЄ'), action: 'bin' },
-                    { title: 'ВІДПРАВИТИ ІСТОРІЮ', action: 'sync' },
-                    { title: 'ВІДНОВИТИ ВСЕ', action: 'pull' }
+                    { title: 'КЛЮЧ API', action: 'api' },
+                    { title: 'BIN ID', action: 'bin' },
+                    { title: 'РУЧНИЙ PUSH', action: 'sync' },
+                    { title: 'РУЧНИЙ PULL', action: 'pull' }
                 ],
                 onSelect: function (item) {
                     if (item.action === 'api') {
@@ -36,27 +44,23 @@
                         Lampa.Input.edit({ value: bin, title: 'BIN ID' }, function (v) {
                             if (v) { localStorage.setItem('cs_bin', v.trim()); _this.showSettings(); }
                         });
-                    } else if (item.action === 'sync') { _this.sync(); }
-                    else if (item.action === 'pull') { _this.pull(); }
+                    } else if (item.action === 'sync') { _this.sync(false); }
+                    else if (item.action === 'pull') { _this.pull(false); }
                 }
             });
         },
-        sync: function () {
+        sync: function (silent) {
             var key = localStorage.getItem('cs_key'), bin = localStorage.getItem('cs_bin');
             if (!key || !bin) return;
 
-            // Спроба отримати історію через внутрішні методи Lampa
-            var historyData = {};
-            try {
-                if (window.Lampa && Lampa.Continue) {
-                    historyData = Lampa.Continue.get();
-                }
-            } catch(e) {}
-
+            // Збираємо все, що тільки можна знайти
             var dataToSync = {
-                continue: Object.keys(historyData).length ? historyData : JSON.parse(localStorage.getItem('lampa_continue') || '{}'),
-                favorite: JSON.parse(localStorage.getItem('lampa_favorite') || '{}'),
-                view: JSON.parse(localStorage.getItem('lampa_view') || '{}')
+                continue: Lampa.Storage.get('continue') || {},
+                favorite: Lampa.Storage.get('favorite') || {},
+                view: Lampa.Storage.get('view') || {},
+                online_view: Lampa.Storage.get('online_view') || {},
+                // Специфічні дані для серій
+                timeline: Lampa.Storage.get('player_timeline') || {}
             };
 
             $.ajax({
@@ -65,7 +69,7 @@
                 headers: { 'X-Master-Key': key, 'Content-Type': 'application/json' },
                 data: JSON.stringify(dataToSync),
                 success: function() { 
-                    Lampa.Noty.show('Дані відправлено! Перевірте розділ continue.'); 
+                    if(!silent) Lampa.Noty.show('Дані в хмарі!'); 
                 }
             });
         },
@@ -78,18 +82,20 @@
                 success: function (res) {
                     var data = res.record ? res.record : res;
                     if (data) {
-                        if (data.continue) localStorage.setItem('lampa_continue', JSON.stringify(data.continue));
-                        if (data.favorite) localStorage.setItem('lampa_favorite', JSON.stringify(data.favorite));
-                        if (data.view) localStorage.setItem('lampa_view', JSON.stringify(data.view));
+                        if (data.continue) Lampa.Storage.set('continue', data.continue);
+                        if (data.favorite) Lampa.Storage.set('favorite', data.favorite);
+                        if (data.view) Lampa.Storage.set('view', data.view);
+                        if (data.online_view) Lampa.Storage.set('online_view', data.online_view);
+                        if (data.timeline) Lampa.Storage.set('player_timeline', data.timeline);
                         
                         if (!silent) {
-                            Lampa.Noty.show('Готово! Перезавантаження...');
-                            setTimeout(function(){ window.location.reload(); }, 500);
+                            Lampa.Noty.show('Синхронізовано!');
+                            setTimeout(function(){ window.location.reload(); }, 300);
                         }
                     }
                 }
             });
         }
     };
-    LampaSyncUltimate.init();
+    LampaSyncEvent.init();
 })();
